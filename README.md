@@ -20,7 +20,7 @@ A cross-platform, local desktop application for visually editing Decent Sampler 
 ### Installation
 
 1. Clone this repository or download the source code.
-2. Install dependencies:
+2. Install dependencies with pip (Python package manager):
     ```
     pip install -r requirements.txt
     ```
@@ -30,6 +30,24 @@ A cross-platform, local desktop application for visually editing Decent Sampler 
 ```
 python src/main.py
 ```
+
+### Distribution (Standalone Executable)
+
+To build a standalone app (no Python required for end users):
+
+1. Install PyInstaller:
+    ```
+    pip install pyinstaller
+    ```
+2. Build the app:
+    ```
+    pyinstaller --onefile --windowed src/main.py
+    ```
+   The executable will be in the `dist/` folder.
+
+- On macOS, you may see a warning about the app being from an unidentified developer. You can override this in System Preferences > Security & Privacy.
+- No code signing is required for personal or community use.
+
 
 ## Project Structure
 
