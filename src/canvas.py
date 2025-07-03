@@ -16,6 +16,7 @@ class VisualCanvas(QWidget):
         self.clipboard = None
         self.xml_ui_elem = None  # Reference to the <ui> or <tab> XML element
         self.main_window = main_window  # Reference to MainWindow for XML sync
+        self._out_of_bounds_warned = False
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasText():
@@ -245,3 +246,26 @@ class VisualCanvas(QWidget):
         tree.write(buf, encoding="utf-8", xml_declaration=True)
         xml_str = buf.getvalue().decode("utf-8")
         self.main_window.xml_editor.setPlainText(xml_str)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        out_of_bounds = []
+        for elem in self.elements:
+            if (
+                elem.x() + elem.width() > self.width()
+                or elem.y() + elem.height() > self.height()
+                or elem.x() < 0
+                or elem.y() < 0
+            ):
+                out_of_bounds.append(elem)
+        if out_of_bounds and not self._out_of_bounds_warned:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self,
+                "Widget(s) Out of View",
+                "One or more widgets are outside the visible canvas area. "
+                "Resize or move them to bring them back into view."
+            )
+            self._out_of_bounds_warned = True
+        elif not out_of_bounds:
+            self._out_of_bounds_warned = False
