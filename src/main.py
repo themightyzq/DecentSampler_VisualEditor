@@ -15,6 +15,8 @@ from panels.piano_keyboard import PianoKeyboardWidget
 from widget_palette import PaletteListWidget
 import utils
 
+from widgets import KnobWidget, SliderWidget, ButtonWidget, MenuWidget, LabelWidget, DraggableElementLabel
+
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -99,6 +101,7 @@ class MainWindow(QMainWindow):
         add_panel_action("Group Envelope", self.group_dock)
         add_panel_action("Routing", self.bus_dock)
         add_panel_action("Piano Keyboard", self.piano_dock)
+        add_panel_action("Help", self.help_dock)
 
     def _update_recent_files_menu(self):
         self.recent_files_menu.clear()
@@ -210,6 +213,35 @@ class MainWindow(QMainWindow):
     def _createCentralWidget(self):
         self.central = QWidget()
         self.central_layout = QHBoxLayout()
+        # --- Help Dock Widget ---
+        from PyQt5.QtWidgets import QTextEdit, QDockWidget
+        help_text = (
+            "<h2>Welcome to Decent Sampler Visual Editor</h2>"
+            "<ul>"
+            "<li><b>Drag widgets</b> from the Widget Palette onto the canvas.</li>"
+            "<li><b>Resize</b> and <b>move</b> widgets with your mouse.</li>"
+            "<li><b>Edit properties</b> in the Properties Panel.</li>"
+            "<li><b>Keyboard Shortcuts:</b>"
+            "<ul>"
+            "<li><b>Delete/Backspace</b>: Delete selected widget</li>"
+            "<li><b>Ctrl+D</b>: Duplicate selected widget</li>"
+            "<li><b>Ctrl+C</b>: Copy selected widget</li>"
+            "<li><b>Ctrl+V</b>: Paste widget</li>"
+            "</ul></li>"
+            "<li><b>Panels</b> can be rearranged, docked, or floated.</li>"
+            "<li>All controls have tooltips and are accessible via keyboard navigation.</li>"
+            "<li>For more help, see the README or documentation.</li>"
+            "</ul>"
+        )
+        self.help_text_widget = QTextEdit()
+        self.help_text_widget.setReadOnly(True)
+        self.help_text_widget.setHtml(help_text)
+        self.help_text_widget.setToolTip("Onboarding and help information")
+        self.help_text_widget.setAccessibleName("Help Panel")
+        self.help_dock = QDockWidget("Help", self)
+        self.help_dock.setWidget(self.help_text_widget)
+        self.help_dock.setFeatures(QDockWidget.AllDockWidgetFeatures)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.help_dock)
 
         # Widget Palette Dock
         self.widget_palette = PaletteListWidget()
@@ -339,15 +371,15 @@ class MainWindow(QMainWindow):
                     # Only update the current tab's canvas
                     for i in range(self.tab_widget.count()):
                         canvas = self.tab_widget.widget(i)
+                        # Remove only widgets tracked in canvas.elements
+                        for widget in list(canvas.elements):
+                            widget.setParent(None)
                         canvas.elements.clear()
-                        for child in canvas.findChildren(DraggableElementLabel):
-                            child.setParent(None)
                         for widget_el in ui_elem:
                             widget_type = widget_el.tag.capitalize()
                             attrs = dict(widget_el.attrib)
                             attrs["type"] = widget_type
                             # Use correct widget class for each type
-                            from widgets import KnobWidget, SliderWidget, ButtonWidget, MenuWidget, LabelWidget, DraggableElementLabel
                             widget_map = {
                                 "Knob": KnobWidget,
                                 "Slider": SliderWidget,

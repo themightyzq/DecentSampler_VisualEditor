@@ -113,7 +113,7 @@ class ResizableDraggableLabel(QLabel):
         super().paintEvent(event)
         if self.selected:
             painter = QPainter(self)
-            painter.setPen(QPen(QColor(Qt.black)))
+            painter.setPen(QPen(QColor("#222")))  # High-contrast border for resize handles
             painter.setBrush(QBrush(QColor(Qt.white)))
             for handle, rect in self._handle_rects().items():
                 painter.drawRect(rect)
@@ -209,12 +209,15 @@ class IconWidget(ResizableDraggableLabel):
         self.icon_emoji = emoji
         self.attrs = dict(default_attrs)
         self.attrs["label"] = label
-        self.setFixedSize(self.attrs["width"], self.attrs["height"])
+        # Remove setFixedSize to allow dynamic resizing
+        self.setMinimumSize(24, 24)
+        self.setMaximumSize(1000, 1000)
         self.update_style()
         self.update_from_attrs()
 
     def update_style(self):
-        self.setStyleSheet("background: #fff; border: 1px solid #888; padding: 2px;")
+        # Use high-contrast border for accessibility
+        self.setStyleSheet("background: #fff; border: 2px solid #222; padding: 2px;")
 
     def update_from_attrs(self):
         x = int(self.attrs.get("x", 0))
@@ -232,12 +235,12 @@ class IconWidget(ResizableDraggableLabel):
         # Draw emoji icon, scaled to fit top 2/3 of widget
         icon_rect = self.rect().adjusted(0, 0, 0, -h//3)
         font = QFont()
-        font.setPointSize(int(min(w, h*2/3) * 0.7))
+        font.setPointSize(max(14, int(min(w, h*2/3) * 0.7)))  # Ensure minimum font size for accessibility
         painter.setFont(font)
         painter.drawText(icon_rect, Qt.AlignCenter, self.icon_emoji)
         # Draw label at bottom
         label = self.attrs.get("label", "")
-        font.setPointSize(int(h * 0.18))
+        font.setPointSize(max(10, int(h * 0.18)))
         painter.setFont(font)
         painter.drawText(0, h - int(h*0.12), w, int(h*0.2), Qt.AlignHCenter | Qt.AlignBottom, label)
         # Draw resize handles if selected
