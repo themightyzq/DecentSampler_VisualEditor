@@ -178,30 +178,57 @@ class MainWindow(QMainWindow):
                     tab_name = tab.attrib.get("name", "main")
                     canvas = VisualCanvas(main_window=self)
                     canvas.properties_panel = self.properties_panel
+                    # Set canvas size and background from <ui> attributes
+                    ui_parent = tab.getparent() if hasattr(tab, "getparent") else ui_elem
+                    ui_attrib = ui_parent.attrib if ui_parent is not None else ui_elem.attrib
+                    try:
+                        width = int(ui_attrib.get("width", 812))
+                        height = int(ui_attrib.get("height", 375))
+                    except Exception:
+                        width, height = 812, 375
+                    bg_image = ui_attrib.get("bgImage", None)
+                    canvas.set_canvas_dimensions_and_bg(width, height, bg_image)
                     # Populate canvas with widgets from XML
                     for widget_el in tab:
-                        widget_type = widget_el.tag.capitalize()
-                        attrs = dict(widget_el.attrib)
-                        attrs["type"] = widget_type
-                        # Use correct widget class for each type
-                        from widgets import KnobWidget, SliderWidget, ButtonWidget, MenuWidget, LabelWidget, DraggableElementLabel
-                        widget_map = {
-                            "Knob": KnobWidget,
-                            "Slider": SliderWidget,
-                            "Button": ButtonWidget,
-                            "Menu": MenuWidget,
-                            "Label": LabelWidget,
-                        }
-                        widget_class = widget_map.get(widget_type, DraggableElementLabel)
-                        label = widget_class(widget_type, canvas) if widget_class is DraggableElementLabel else widget_class(canvas)
-                        if hasattr(label, "attrs"):
-                            label.attrs = dict(attrs)
-                            if hasattr(label, "update_from_attrs"):
-                                label.update_from_attrs()
-                        label.show()
-                        if hasattr(label, "setToolTip"):
-                            label.setToolTip(widget_type)
-                        canvas.elements.append(label)
+                        try:
+                            tag = widget_el.tag.lower()
+                            attrs = dict(widget_el.attrib)
+                            # Map DecentSampler XML tags to widget classes
+                            from widgets import KnobWidget, SliderWidget, ButtonWidget, MenuWidget, LabelWidget, DraggableElementLabel
+                            if tag == "labeled-knob":
+                                widget_class = KnobWidget
+                                attrs["type"] = "Knob"
+                            elif tag == "control":
+                                style = attrs.get("style", "").lower()
+                                if "linear" in style:
+                                    widget_class = SliderWidget
+                                    attrs["type"] = "Slider"
+                                else:
+                                    widget_class = DraggableElementLabel
+                                    attrs["type"] = "Unknown"
+                            elif tag == "label":
+                                widget_class = LabelWidget
+                                attrs["type"] = "Label"
+                            elif tag == "menu":
+                                widget_class = MenuWidget
+                                attrs["type"] = "Menu"
+                            elif tag == "button":
+                                widget_class = ButtonWidget
+                                attrs["type"] = "Button"
+                            else:
+                                widget_class = DraggableElementLabel
+                                attrs["type"] = tag.capitalize()
+                            label = widget_class(tag.capitalize(), canvas) if widget_class is DraggableElementLabel else widget_class(canvas)
+                            if hasattr(label, "attrs"):
+                                label.attrs = dict(attrs)
+                                if hasattr(label, "update_from_attrs"):
+                                    label.update_from_attrs()
+                            label.show()
+                            if hasattr(label, "setToolTip"):
+                                label.setToolTip(attrs.get("label", attrs.get("type", tag.capitalize())))
+                            canvas.elements.append(label)
+                        except Exception as e:
+                            print(f"[MainWindow] Failed to instantiate widget '{tag}': {e}")
                     self.visual_canvases[tab_name] = canvas
                     self.tab_widget.addTab(canvas, tab_name)
                 self.tab_widget.setCurrentIndex(0)
@@ -311,7 +338,7 @@ class MainWindow(QMainWindow):
         self.properties_panel.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Expanding)
         self.properties_panel.setToolTip("Edit properties of the selected element")
         canvas = VisualCanvas(main_window=self)
-        canvas.setMinimumSize(600, 600)
+        canvas.setMinimumSize(812, 375)
         canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         canvas.setToolTip("Visual editor canvas")
         canvas.properties_panel = self.properties_panel
@@ -356,6 +383,11 @@ class MainWindow(QMainWindow):
     def _on_tab_changed(self, idx):
         # 0 = Design, 1 = XML
         if idx == 1:
+            # Before switching to XML tab, sync all canvases to XML
+            for i in range(self.tab_widget.count()):
+                canvas = self.tab_widget.widget(i)
+                if hasattr(canvas, "update_xml_from_canvas"):
+                    canvas.update_xml_from_canvas()
             # XML tab: make editor editable
             self.xml_editor.setReadOnly(False)
         else:
@@ -368,35 +400,70 @@ class MainWindow(QMainWindow):
                 # Repopulate the canvas from XML
                 ui_elem = root.find(".//ui")
                 if ui_elem is not None:
-                    # Only update the current tab's canvas
+                    widget_tags = {"knob", "slider", "button", "menu", "label", "labeled-knob", "control"}
+                    # Find <tab> elements if present
+                    tabs = [tab for tab in ui_elem if tab.tag == "tab"]
+                    # Determine which tab to use (default to first if multiple)
+                    if tabs:
+                        # Use the currently selected tab index if possible
+                        tab_idx = self.tab_widget.currentIndex() if self.tab_widget.count() > 0 else 0
+                        tab_elem = tabs[tab_idx] if tab_idx < len(tabs) else tabs[0]
+                        widget_parent = tab_elem
+                    else:
+                        widget_parent = ui_elem
                     for i in range(self.tab_widget.count()):
                         canvas = self.tab_widget.widget(i)
                         # Remove only widgets tracked in canvas.elements
                         for widget in list(canvas.elements):
                             widget.setParent(None)
                         canvas.elements.clear()
-                        for widget_el in ui_elem:
-                            widget_type = widget_el.tag.capitalize()
-                            attrs = dict(widget_el.attrib)
-                            attrs["type"] = widget_type
-                            # Use correct widget class for each type
-                            widget_map = {
-                                "Knob": KnobWidget,
-                                "Slider": SliderWidget,
-                                "Button": ButtonWidget,
-                                "Menu": MenuWidget,
-                                "Label": LabelWidget,
-                            }
-                            widget_class = widget_map.get(widget_type, DraggableElementLabel)
-                            label = widget_class(widget_type, canvas) if widget_class is DraggableElementLabel else widget_class(canvas)
-                            if hasattr(label, "attrs"):
-                                label.attrs = dict(attrs)
-                                if hasattr(label, "update_from_attrs"):
-                                    label.update_from_attrs()
-                            label.show()
-                            if hasattr(label, "setToolTip"):
-                                label.setToolTip(widget_type)
-                            canvas.elements.append(label)
+                        for widget_el in widget_parent:
+                            if widget_el.tag.lower() not in widget_tags:
+                                continue
+                            try:
+                                tag = widget_el.tag.lower()
+                                attrs = dict(widget_el.attrib)
+                                # Map DecentSampler XML tags to widget classes
+                                if tag == "labeled-knob":
+                                    widget_class = KnobWidget
+                                    attrs["type"] = "Knob"
+                                elif tag == "control":
+                                    style = attrs.get("style", "").lower()
+                                    if "linear" in style:
+                                        widget_class = SliderWidget
+                                        attrs["type"] = "Slider"
+                                    else:
+                                        widget_class = DraggableElementLabel
+                                        attrs["type"] = "Unknown"
+                                elif tag == "label":
+                                    widget_class = LabelWidget
+                                    attrs["type"] = "Label"
+                                elif tag == "menu":
+                                    widget_class = MenuWidget
+                                    attrs["type"] = "Menu"
+                                elif tag == "button":
+                                    widget_class = ButtonWidget
+                                    attrs["type"] = "Button"
+                                elif tag == "slider":
+                                    widget_class = SliderWidget
+                                    attrs["type"] = "Slider"
+                                elif tag == "knob":
+                                    widget_class = KnobWidget
+                                    attrs["type"] = "Knob"
+                                else:
+                                    widget_class = DraggableElementLabel
+                                    attrs["type"] = tag.capitalize()
+                                label = widget_class(tag.capitalize(), canvas) if widget_class is DraggableElementLabel else widget_class(canvas)
+                                if hasattr(label, "attrs"):
+                                    label.attrs = dict(attrs)
+                                    if hasattr(label, "update_from_attrs"):
+                                        label.update_from_attrs()
+                                label.show()
+                                if hasattr(label, "setToolTip"):
+                                    label.setToolTip(attrs.get("label", attrs.get("type", tag.capitalize())))
+                                canvas.elements.append(label)
+                            except Exception as e:
+                                print(f"[MainWindow] Failed to instantiate widget '{tag}': {e}")
             except Exception as e:
                 QMessageBox.critical(self, "XML Parse Error", f"Failed to parse XML:\n{e}")
                 # Revert editor to last valid xml_root
