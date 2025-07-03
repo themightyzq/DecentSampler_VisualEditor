@@ -1,13 +1,13 @@
 from PyQt5.QtWidgets import QWidget, QSizePolicy, QLineEdit, QPushButton, QFormLayout, QLabel
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPainter
+from PyQt5.QtGui import QPainter, QColor
 from widgets import DraggableElementLabel
 
 class VisualCanvas(QWidget):
     def __init__(self, parent=None, main_window=None):
         super().__init__(parent)
         self.setAcceptDrops(True)
-        self.setStyleSheet("background: #f0f0f0; border: 1px solid #bbb;")
+        self.setStyleSheet("border: 1px solid #bbb;")
         self.setMinimumSize(400, 400)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.elements = []
@@ -17,6 +17,51 @@ class VisualCanvas(QWidget):
         self.xml_ui_elem = None  # Reference to the <ui> or <tab> XML element
         self.main_window = main_window  # Reference to MainWindow for XML sync
         self._out_of_bounds_warned = False
+        self._bg_image = None
+        self._bg_pixmap = None
+
+    def set_canvas_dimensions_and_bg(self, width, height, bg_image=None):
+        """
+        Set the canvas to the exact dimensions specified in the .dspreset <ui>.
+        Uses QPixmap for robust image rendering. Handles relative/absolute paths.
+        """
+        self.setFixedSize(width, height)
+        self._bg_image = None
+        self._bg_pixmap = None
+        if bg_image:
+            import os
+            orig_bg_image = bg_image
+            resolved = False
+            preset_path = getattr(self.main_window, "_last_save_path", None)
+            if preset_path:
+                preset_dir = os.path.dirname(preset_path)
+                candidate = os.path.join(preset_dir, bg_image)
+                if os.path.exists(candidate):
+                    bg_image = candidate
+                    resolved = True
+            if not resolved and os.path.exists(bg_image):
+                resolved = True
+            if resolved:
+                from PyQt5.QtGui import QPixmap
+                self._bg_pixmap = QPixmap(bg_image)
+                if self._bg_pixmap.isNull():
+                    print(f"[VisualCanvas] QPixmap failed to load image: {bg_image}")
+                    self._bg_pixmap = None
+                else:
+                    print(f"[VisualCanvas] Loaded background image: {bg_image}")
+                    self._bg_image = bg_image
+            else:
+                print(f"[VisualCanvas] Background image not found: {orig_bg_image} (tried: {bg_image})")
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        # Draw background image if available, else fill with solid color
+        if self._bg_pixmap:
+            painter.drawPixmap(self.rect(), self._bg_pixmap)
+        else:
+            painter.fillRect(self.rect(), QColor("#f0f0f0"))
+        super().paintEvent(event)
 
     def dragEnterEvent(self, event):
         if event.mimeData().hasText():
@@ -38,17 +83,24 @@ class VisualCanvas(QWidget):
             }
             widget_class = widget_map.get(text, DraggableElementLabel)
             pos = event.pos()
+            # Clamp y for KnobWidget so y + 100px does not exceed canvas height
+            x = pos.x()
+            y = pos.y()
+            if widget_class.__name__ == "KnobWidget":
+                knob_height = 100  # Reserve at least 100px vertical space
+                max_y = max(0, self.height() - knob_height)
+                y = min(y, max_y)
             attrs = {
                 "type": text,
-                "x": pos.x(),
-                "y": pos.y(),
+                "x": x,
+                "y": y,
             }
             w = widget_class(text, self) if widget_class is DraggableElementLabel else widget_class(self)
             if hasattr(w, "attrs"):
                 w.attrs.update(attrs)
                 if hasattr(w, "update_from_attrs"):
                     w.update_from_attrs()
-            w.move(pos)
+            w.move(x, y)
             w.show()
             w.raise_()
             self.elements.append(w)
@@ -164,6 +216,11 @@ class VisualCanvas(QWidget):
             }
             widget_type = attrs.get("type", "")
             widget_class = widget_map.get(widget_type, DraggableElementLabel)
+            # Clamp y for KnobWidget so y + 100px does not exceed canvas height
+            if widget_class.__name__ == "KnobWidget":
+                knob_height = 100
+                max_y = max(0, self.height() - knob_height)
+                attrs["y"] = min(attrs["y"], max_y)
             label = widget_class(widget_type, self) if widget_class is DraggableElementLabel else widget_class(self)
             if hasattr(label, "attrs"):
                 label.attrs = dict(attrs)
@@ -196,6 +253,11 @@ class VisualCanvas(QWidget):
             }
             widget_type = attrs.get("type", "")
             widget_class = widget_map.get(widget_type, DraggableElementLabel)
+            # Clamp y for KnobWidget so y + 100px does not exceed canvas height
+            if widget_class.__name__ == "KnobWidget":
+                knob_height = 100
+                max_y = max(0, self.height() - knob_height)
+                attrs["y"] = min(attrs["y"], max_y)
             label = widget_class(widget_type, self) if widget_class is DraggableElementLabel else widget_class(self)
             if hasattr(label, "attrs"):
                 label.attrs = dict(attrs)
@@ -227,9 +289,11 @@ class VisualCanvas(QWidget):
         if ui_elem is None:
             ui_elem = ET.SubElement(root, "ui", {"width": "812", "height": "375"})
 
-        # Remove all existing child elements (widgets) from <ui> or <tab>
+        # Only remove widget elements, not non-widget children like <keyboard>
+        widget_tags = {"knob", "slider", "button", "menu", "label", "labeled-knob", "control"}
         for child in list(ui_elem):
-            ui_elem.remove(child)
+            if child.tag.lower() in widget_tags:
+                ui_elem.remove(child)
 
         # Add current canvas elements as XML children
         for elem in self.elements:
@@ -250,12 +314,17 @@ class VisualCanvas(QWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         out_of_bounds = []
+        tolerance = 10  # Allow up to 10px out of bounds before warning
         for elem in self.elements:
+            # Only check elements with attrs
+            if not hasattr(elem, "attrs"):
+                continue
+            x, y, w, h = elem.x(), elem.y(), elem.width(), elem.height()
             if (
-                elem.x() + elem.width() > self.width()
-                or elem.y() + elem.height() > self.height()
-                or elem.x() < 0
-                or elem.y() < 0
+                x + w > self.width() + tolerance
+                or y + h > self.height() + tolerance
+                or x < -tolerance
+                or y < -tolerance
             ):
                 out_of_bounds.append(elem)
         if out_of_bounds and not self._out_of_bounds_warned:

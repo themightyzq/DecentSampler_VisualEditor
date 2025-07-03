@@ -257,6 +257,33 @@ class KnobWidget(IconWidget):
             "type": "Knob", "x": 0, "y": 0, "width": 80, "height": 80
         }, parent)
 
+    def update_from_attrs(self):
+        # Enforce fixed height for layout: 95px, with minor +/- 5px for textSize if present
+        x = int(self.attrs.get("x", 0))
+        y = int(self.attrs.get("y", 0))
+        w = int(self.attrs.get("width", 80))
+        # Determine height: default 95, adjust for textSize if present
+        base_height = 95
+        text_size = self.attrs.get("textSize")
+        try:
+            if text_size is not None:
+                ts = int(text_size)
+                # If textSize is above 16, add up to +5px; if below 14, subtract up to -5px
+                if ts > 16:
+                    h = min(base_height + 5, base_height + (ts - 16))
+                elif ts < 14:
+                    h = max(base_height - 5, base_height - (14 - ts))
+                else:
+                    h = base_height
+            else:
+                h = base_height
+        except Exception:
+            h = base_height
+        self.attrs["height"] = h  # For XML round-trip, but always use this for geometry
+        self.setGeometry(x, y, w, h)
+        self.update()
+        self.show()
+
 class SliderWidget(IconWidget):
     def __init__(self, parent=None):
         super().__init__("🎚️", "Slider", {
@@ -281,11 +308,81 @@ class LabelWidget(IconWidget):
             "type": "Label", "x": 0, "y": 0, "width": 80, "height": 30
         }, parent)
 
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        w, h = self.width(), self.height()
+        painter = QPainter(self)
+        # Draw label background for contrast
+        bg_radius = int(min(w, h) * 0.18)
+        bg_color = QColor(255, 255, 255, 220)  # semi-transparent white
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(bg_color)
+        painter.setPen(Qt.NoPen)
+        painter.drawRoundedRect(4, 4, w-8, h-8, bg_radius, bg_radius)
+        # Draw label text with correct color and size
+        label = self.attrs.get("label", self.attrs.get("text", ""))
+        text_size = 14
+        try:
+            if "textSize" in self.attrs:
+                text_size = int(self.attrs["textSize"])
+        except Exception:
+            pass
+        font = QFont()
+        font.setPointSize(text_size)
+        font.setBold(True)
+        painter.setFont(font)
+        # Parse textColor (ARGB hex)
+        color_str = self.attrs.get("textColor", "FF000000")
+        try:
+            if color_str.startswith("#"):
+                color_str = color_str[1:]
+            if len(color_str) == 8:
+                a = int(color_str[0:2], 16)
+                r = int(color_str[2:4], 16)
+                g = int(color_str[4:6], 16)
+                b = int(color_str[6:8], 16)
+                color = QColor(r, g, b, a)
+            elif len(color_str) == 6:
+                r = int(color_str[0:2], 16)
+                g = int(color_str[2:4], 16)
+                b = int(color_str[4:6], 16)
+                color = QColor(r, g, b)
+            else:
+                color = QColor(0, 0, 0)
+        except Exception:
+            color = QColor(0, 0, 0)
+        # Draw drop shadow
+        shadow_color = QColor(0, 0, 0, 120)
+        painter.setPen(shadow_color)
+        painter.drawText(2, 2, w, h, Qt.AlignCenter, label)
+        # Draw main text
+        painter.setPen(color)
+        painter.drawText(0, 0, w, h, Qt.AlignCenter, label)
+        # Draw resize handles if selected
+        if self.selected:
+            painter.setPen(QPen(Qt.black))
+            painter.setBrush(QBrush(Qt.white))
+            for handle, rect in self._handle_rects().items():
+                painter.drawRect(rect)
+
 # --- DraggableElementLabel (restored for proper dropEvent usage) ---
 class DraggableElementLabel(ResizableDraggableLabel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # Add any initialization needed for drag/drop
+        # Ensure all elements have an attrs dict for compatibility
+        if not hasattr(self, "attrs"):
+            self.attrs = {
+                "type": "Unknown",
+                "x": 0,
+                "y": 0,
+                "width": 80,
+                "height": 30,
+                "label": "",
+            }
+
+    def update_style(self):
+        # No-op for compatibility
+        pass
 
     def dropEvent(self, event):
         # Implement drop event logic as needed
