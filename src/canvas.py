@@ -20,15 +20,22 @@ class VisualCanvas(QWidget):
         self._out_of_bounds_warned = False
         self._bg_image = None
         self._bg_pixmap = None
+        self._bg_color = "#f0f0f0"
+        self._text_color = None
 
-    def set_canvas_dimensions_and_bg(self, width, height, bg_image=None):
+    def set_canvas_dimensions_and_bg(self, width, height, bg_image=None, bg_color=None):
         """
         Set the canvas to the exact dimensions specified in the .dspreset <ui>.
         Uses QPixmap for robust image rendering. Handles relative/absolute paths.
+        Optionally sets background color.
         """
         self.setFixedSize(width, height)
         self._bg_image = None
         self._bg_pixmap = None
+        if bg_color:
+            self._bg_color = bg_color
+        else:
+            self._bg_color = "#f0f0f0"
         if bg_image:
             import os
             orig_bg_image = bg_image
@@ -55,13 +62,19 @@ class VisualCanvas(QWidget):
                 print(f"[VisualCanvas] Background image not found: {orig_bg_image} (tried: {bg_image})")
         self.update()
 
+    def set_default_text_color(self, color):
+        """Set the default text color for the canvas (stub for future use)."""
+        self._text_color = color
+        # If you have child widgets that should use this color, propagate here
+        self.update()
+
     def paintEvent(self, event):
         painter = QPainter(self)
         # Draw background image if available, else fill with solid color
         if self._bg_pixmap:
             painter.drawPixmap(self.rect(), self._bg_pixmap)
         else:
-            painter.fillRect(self.rect(), QColor("#f0f0f0"))
+            painter.fillRect(self.rect(), QColor(self._bg_color))
         super().paintEvent(event)
 
     def dragEnterEvent(self, event):

@@ -915,6 +915,34 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
         self._last_project_properties = props
+        self.refresh_ui_from_xml()
+
+    def refresh_ui_from_xml(self):
+        # Refresh canvas and UI elements from the current xml_root
+        root = getattr(self, "xml_root", None)
+        if root is None:
+            return
+        ui_elem = root.find(".//ui")
+        if ui_elem is not None:
+            width = int(ui_elem.attrib.get("width", 812))
+            height = int(ui_elem.attrib.get("height", 375))
+            bg_image = ui_elem.attrib.get("bgImage", None)
+            bg_color = ui_elem.attrib.get("bgColor", None)
+            text_color = ui_elem.attrib.get("textColor", None)
+            # Update all canvases
+            for i in range(self.tab_widget.count()):
+                canvas = self.tab_widget.widget(i)
+                if hasattr(canvas, "set_canvas_dimensions_and_bg"):
+                    # If set_canvas_dimensions_and_bg supports bg_color, pass it
+                    try:
+                        canvas.set_canvas_dimensions_and_bg(width, height, bg_image, bg_color)
+                    except TypeError:
+                        # Fallback for old signature
+                        canvas.set_canvas_dimensions_and_bg(width, height, bg_image)
+                # If canvas supports setting default text color, set it
+                if text_color and hasattr(canvas, "set_default_text_color"):
+                    canvas.set_default_text_color(text_color)
+        # TODO: If you have a cover art widget, refresh it here as well
 
 def main():
     import sys
