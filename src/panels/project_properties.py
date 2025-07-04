@@ -199,16 +199,31 @@ class ProjectPropertiesWidget(QWidget):
         connect_line_edit(self.text_color_edit, "textColor", "_text_color_last")
 
         # File pickers
+        import os
+
+        def make_relative_path(path):
+            # Make path relative to the current working directory (project root)
+            if not path:
+                return ""
+            cwd = os.getcwd()
+            try:
+                rel = os.path.relpath(path, cwd)
+                return rel
+            except Exception:
+                return path
+
         def browse_cover_art():
             path, _ = QFileDialog.getOpenFileName(self, "Select Cover Art", "", "Images (*.png *.jpg *.jpeg *.bmp *.gif)")
             if path:
-                self.cover_art_edit.setText(path)
+                rel_path = make_relative_path(path)
+                self.cover_art_edit.setText(rel_path)
         self.cover_art_button.clicked.connect(browse_cover_art)
 
         def browse_bg_image():
             path, _ = QFileDialog.getOpenFileName(self, "Select Background Image", "", "Images (*.png *.jpg *.jpeg *.bmp *.gif)")
             if path:
-                self.bg_image_edit.setText(path)
+                rel_path = make_relative_path(path)
+                self.bg_image_edit.setText(rel_path)
         self.bg_image_button.clicked.connect(browse_bg_image)
 
         # Color pickers
