@@ -14,6 +14,8 @@ from panels.sample_browser import SampleBrowserWidget
 from panels.group_properties import GroupPropertiesWidget
 from panels.bus_routing import BusRoutingWidget
 from panels.piano_keyboard import PianoKeyboardWidget
+from panels.project_properties import ProjectPropertiesWidget
+from panels.project_properties_dialog import ProjectPropertiesDialog
 from widget_palette import PaletteListWidget
 import utils
 
@@ -61,6 +63,42 @@ class MainWindow(QMainWindow):
 
     def _createMenuBar(self):
         menubar = self.menuBar()
+        # --- File Menu ---
+        self.file_menu = menubar.addMenu("File")
+        new_action = QAction("New", self)
+        new_action.setShortcut(QKeySequence.New)
+        new_action.triggered.connect(self.new_project)
+        self.file_menu.addAction(new_action)
+        open_action = QAction("Open...", self)
+        open_action.setShortcut(QKeySequence.Open)
+        open_action.triggered.connect(self.open_file)
+        self.file_menu.addAction(open_action)
+
+        # Recent Files submenu
+        self.recent_files_menu = self.file_menu.addMenu("Recent Files")
+        self._update_recent_files_menu()
+
+        save_action = QAction("Save", self)
+        save_action.setShortcut(QKeySequence.Save)
+        save_action.triggered.connect(self.save_file)
+        self.file_menu.addAction(save_action)
+        save_as_action = QAction("Save As...", self)
+        save_as_action.setShortcut(QKeySequence.SaveAs)
+        save_as_action.triggered.connect(self.save_file_as)
+        self.file_menu.addAction(save_as_action)
+
+        # Project Properties action (insert after Save As...)
+        self.project_properties_action = QAction("Project Properties", self)
+        self.project_properties_action.setShortcut("Ctrl+Shift+P")
+        self.project_properties_action.triggered.connect(self.open_project_properties_dialog)
+        self.file_menu.addAction(self.project_properties_action)
+
+        self.file_menu.addSeparator()
+        quit_action = QAction("Quit", self)
+        quit_action.setShortcut(QKeySequence.Quit)
+        quit_action.triggered.connect(self.close)
+        self.file_menu.addAction(quit_action)
+
         # --- Edit Menu for Undo/Redo ---
         edit_menu = menubar.addMenu("Edit")
         undo_action = QAction("Undo", self)
@@ -76,35 +114,7 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence.Undo, self, activated=self.undo_stack.undo)
         QShortcut(QKeySequence.Redo, self, activated=self.undo_stack.redo)
 
-        file_menu = menubar.addMenu("File")
-        new_action = QAction("New", self)
-        new_action.setShortcut(QKeySequence.New)
-        new_action.triggered.connect(self.new_project)
-        file_menu.addAction(new_action)
-        open_action = QAction("Open...", self)
-        open_action.setShortcut(QKeySequence.Open)
-        open_action.triggered.connect(self.open_file)
-        file_menu.addAction(open_action)
-
-        # Recent Files submenu
-        self.recent_files_menu = file_menu.addMenu("Recent Files")
-        self._update_recent_files_menu()
-
-        save_action = QAction("Save", self)
-        save_action.setShortcut(QKeySequence.Save)
-        save_action.triggered.connect(self.save_file)
-        file_menu.addAction(save_action)
-        save_as_action = QAction("Save As...", self)
-        save_as_action.setShortcut(QKeySequence.SaveAs)
-        save_as_action.triggered.connect(self.save_file_as)
-        file_menu.addAction(save_as_action)
-        file_menu.addSeparator()
-        quit_action = QAction("Quit", self)
-        quit_action.setShortcut(QKeySequence.Quit)
-        quit_action.triggered.connect(self.close)
-        file_menu.addAction(quit_action)
-
-        # Panels menu for showing/hiding dock widgets
+        # --- Panels Menu ---
         panels_menu = menubar.addMenu("Panels")
         self._panel_actions = []
 
@@ -119,6 +129,7 @@ class MainWindow(QMainWindow):
         add_panel_action("Widget Palette", self.widget_palette_dock)
         add_panel_action("Sample Mapping", self.sample_dock)
         add_panel_action("Group Envelope", self.group_dock)
+        # Removed Project Properties dock from Panels menu
         add_panel_action("Routing", self.bus_dock)
         add_panel_action("Piano Keyboard", self.piano_dock)
         add_panel_action("Help", self.help_dock)
@@ -163,6 +174,50 @@ class MainWindow(QMainWindow):
             self._last_save_path = file_name
             import xml.etree.ElementTree as ET
             root = ET.fromstring(xml_str)
+            # --- Project Properties: Load from XML into panel ---
+            props = {}
+            # Top-level <DecentSampler> attributes
+            props["presetName"] = root.attrib.get("presetName", "")
+            props["minVersion"] = root.attrib.get("minVersion", "")
+            props["pluginVersion"] = root.attrib.get("pluginVersion", "")
+            # <ui> attributes
+            ui_elem = root.find(".//ui")
+            if ui_elem is not None:
+                props["coverArt"] = ui_elem.attrib.get("coverArt", "")
+                props["bgImage"] = ui_elem.attrib.get("bgImage", "")
+                props["bgColor"] = ui_elem.attrib.get("bgColor", "#FFFFFFFF")
+                props["width"] = ui_elem.attrib.get("width", 812)
+                props["height"] = ui_elem.attrib.get("height", 375)
+                props["layoutMode"] = ui_elem.attrib.get("layoutMode", "")
+                props["bgMode"] = ui_elem.attrib.get("bgMode", "")
+            else:
+                props["coverArt"] = ""
+                props["bgImage"] = ""
+                props["bgColor"] = "#FFFFFFFF"
+                props["width"] = 812
+                props["height"] = 375
+                props["layoutMode"] = ""
+                props["bgMode"] = ""
+            # <groups> attributes
+            groups_elem = root.find(".//groups")
+            if groups_elem is not None:
+                props["volume"] = groups_elem.attrib.get("volume", 1.0)
+                props["globalTuning"] = groups_elem.attrib.get("globalTuning", 0.0)
+                props["glideTime"] = groups_elem.attrib.get("glideTime", 0.0)
+                props["glideMode"] = groups_elem.attrib.get("glideMode", "legato")
+                props["pan"] = groups_elem.attrib.get("pan", 0.0)
+                props["ampVelTrack"] = groups_elem.attrib.get("ampVelTrack", 1.0)
+            else:
+                props["volume"] = 1.0
+                props["globalTuning"] = 0.0
+                props["glideTime"] = 0.0
+                props["glideMode"] = "legato"
+                props["pan"] = 0.0
+                props["ampVelTrack"] = 1.0
+            # Text color is not in XML, so keep as default
+            props["textColor"] = "#FF000000"
+            self._last_project_properties = props
+            self._last_project_properties = props
             # Load buses globally
             bus_elems = root.findall(".//bus")
             bus_names = [bus.attrib.get("name", "") for bus in bus_elems if bus.attrib.get("name", "")]
@@ -320,6 +375,9 @@ class MainWindow(QMainWindow):
         self.group_dock.setMinimumWidth(180)
         self.group_dock.setFeatures(QDockWidget.AllDockWidgetFeatures)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.group_dock)
+
+        # Project Properties Dialog (no longer docked)
+        # (Menu item now added above in _createMenuBar)
 
         # Bus Routing Dock
         self.bus_routing = BusRoutingWidget()
@@ -563,11 +621,49 @@ class MainWindow(QMainWindow):
         try:
             xml_text = self.xml_editor.toPlainText()
             root = ET.fromstring(xml_text)
-            groups_el = root.find(".//groups")
-            if groups_el is None:
-                groups_el = ET.SubElement(root, "groups")
-            for group in list(groups_el):
-                groups_el.remove(group)
+            # --- Project Properties: Write from last dialog state to XML ---
+            props = getattr(self, "_last_project_properties", None)
+            if props is None and hasattr(self, "project_properties"):
+                props = self.project_properties.get_properties()
+                # Top-level <DecentSampler> attributes
+                if props.get("presetName"):
+                    root.attrib["presetName"] = props["presetName"]
+                if props.get("minVersion"):
+                    root.attrib["minVersion"] = props["minVersion"]
+                if props.get("pluginVersion"):
+                    root.attrib["pluginVersion"] = props["pluginVersion"]
+                # <ui> attributes
+                ui_elem = root.find(".//ui")
+                if ui_elem is not None:
+                    if props.get("coverArt"):
+                        ui_elem.attrib["coverArt"] = props["coverArt"]
+                    if props.get("bgImage"):
+                        ui_elem.attrib["bgImage"] = props["bgImage"]
+                    if props.get("bgColor"):
+                        ui_elem.attrib["bgColor"] = props["bgColor"]
+                    if props.get("width"):
+                        ui_elem.attrib["width"] = str(int(props["width"]))
+                    if props.get("height"):
+                        ui_elem.attrib["height"] = str(int(props["height"]))
+                    if props.get("layoutMode"):
+                        ui_elem.attrib["layoutMode"] = props["layoutMode"]
+                    if props.get("bgMode"):
+                        ui_elem.attrib["bgMode"] = props["bgMode"]
+                # <groups> attributes
+                groups_elem = root.find(".//groups")
+                if groups_elem is not None:
+                    if props.get("volume") is not None:
+                        groups_elem.attrib["volume"] = str(props["volume"])
+                    if props.get("globalTuning") is not None:
+                        groups_elem.attrib["globalTuning"] = str(props["globalTuning"])
+                    if props.get("glideTime") is not None:
+                        groups_elem.attrib["glideTime"] = str(props["glideTime"])
+                    if props.get("glideMode"):
+                        groups_elem.attrib["glideMode"] = props["glideMode"]
+                    if props.get("pan") is not None:
+                        groups_elem.attrib["pan"] = str(props["pan"])
+                    if props.get("ampVelTrack") is not None:
+                        groups_elem.attrib["ampVelTrack"] = str(props["ampVelTrack"])
             if hasattr(self, "bus_routing"):
                 for bus_elem in root.findall(".//bus"):
                     parent = bus_elem.getparent() if hasattr(bus_elem, "getparent") else None
@@ -705,6 +801,120 @@ class MainWindow(QMainWindow):
         new_text = text.replace(find_str, replace_str)
         if new_text != text:
             self.xml_editor.setPlainText(new_text)
+
+    def open_project_properties_dialog(self):
+        # Use last loaded/saved properties as initial state
+        props = getattr(self, "_last_project_properties", None)
+        if props is None:
+            # fallback: try to get from XML
+            import xml.etree.ElementTree as ET
+            xml_text = self.xml_editor.toPlainText()
+            try:
+                root = ET.fromstring(xml_text)
+                props = {}
+                props["presetName"] = root.attrib.get("presetName", "")
+                props["minVersion"] = root.attrib.get("minVersion", "")
+                props["pluginVersion"] = root.attrib.get("pluginVersion", "")
+                ui_elem = root.find(".//ui")
+                if ui_elem is not None:
+                    props["coverArt"] = ui_elem.attrib.get("coverArt", "")
+                    props["bgImage"] = ui_elem.attrib.get("bgImage", "")
+                    props["bgColor"] = ui_elem.attrib.get("bgColor", "#FFFFFFFF")
+                    props["width"] = ui_elem.attrib.get("width", 812)
+                    props["height"] = ui_elem.attrib.get("height", 375)
+                    props["layoutMode"] = ui_elem.attrib.get("layoutMode", "")
+                    props["bgMode"] = ui_elem.attrib.get("bgMode", "")
+                else:
+                    props["coverArt"] = ""
+                    props["bgImage"] = ""
+                    props["bgColor"] = "#FFFFFFFF"
+                    props["width"] = 812
+                    props["height"] = 375
+                    props["layoutMode"] = ""
+                    props["bgMode"] = ""
+                groups_elem = root.find(".//groups")
+                if groups_elem is not None:
+                    props["volume"] = groups_elem.attrib.get("volume", 1.0)
+                    props["globalTuning"] = groups_elem.attrib.get("globalTuning", 0.0)
+                    props["glideTime"] = groups_elem.attrib.get("glideTime", 0.0)
+                    props["glideMode"] = groups_elem.attrib.get("glideMode", "legato")
+                    props["pan"] = groups_elem.attrib.get("pan", 0.0)
+                    props["ampVelTrack"] = groups_elem.attrib.get("ampVelTrack", 1.0)
+                else:
+                    props["volume"] = 1.0
+                    props["globalTuning"] = 0.0
+                    props["glideTime"] = 0.0
+                    props["glideMode"] = "legato"
+                    props["pan"] = 0.0
+                    props["ampVelTrack"] = 1.0
+                props["textColor"] = "#FF000000"
+            except Exception:
+                props = {}
+        dlg = ProjectPropertiesDialog(self, main_window=self, initial_properties=props)
+        result = dlg.exec_()
+        if result == dlg.Accepted or dlg._applied:
+            self._last_project_properties = dlg.get_properties()
+            self.apply_project_properties(self._last_project_properties)
+
+    def apply_project_properties(self, props):
+        # Update XML in editor with new project properties and update _last_project_properties
+        import xml.etree.ElementTree as ET
+        xml_text = self.xml_editor.toPlainText()
+        try:
+            root = ET.fromstring(xml_text)
+        except Exception:
+            return
+        # Top-level <DecentSampler> attributes
+        if props.get("presetName") is not None:
+            root.attrib["presetName"] = str(props["presetName"])
+        if props.get("minVersion") is not None:
+            root.attrib["minVersion"] = str(props["minVersion"])
+        if props.get("pluginVersion") is not None:
+            root.attrib["pluginVersion"] = str(props["pluginVersion"])
+        # <ui> attributes
+        ui_elem = root.find(".//ui")
+        if ui_elem is not None:
+            if props.get("coverArt") is not None:
+                ui_elem.attrib["coverArt"] = str(props["coverArt"])
+            if props.get("bgImage") is not None:
+                ui_elem.attrib["bgImage"] = str(props["bgImage"])
+            if props.get("bgColor") is not None:
+                ui_elem.attrib["bgColor"] = str(props["bgColor"])
+            if props.get("width") is not None:
+                ui_elem.attrib["width"] = str(int(props["width"]))
+            if props.get("height") is not None:
+                ui_elem.attrib["height"] = str(int(props["height"]))
+            if props.get("layoutMode") is not None:
+                ui_elem.attrib["layoutMode"] = str(props["layoutMode"])
+            if props.get("bgMode") is not None:
+                ui_elem.attrib["bgMode"] = str(props["bgMode"])
+        # <groups> attributes
+        groups_elem = root.find(".//groups")
+        if groups_elem is not None:
+            if props.get("volume") is not None:
+                groups_elem.attrib["volume"] = str(props["volume"])
+            if props.get("globalTuning") is not None:
+                groups_elem.attrib["globalTuning"] = str(props["globalTuning"])
+            if props.get("glideTime") is not None:
+                groups_elem.attrib["glideTime"] = str(props["glideTime"])
+            if props.get("glideMode") is not None:
+                groups_elem.attrib["glideMode"] = str(props["glideMode"])
+            if props.get("pan") is not None:
+                groups_elem.attrib["pan"] = str(props["pan"])
+            if props.get("ampVelTrack") is not None:
+                groups_elem.attrib["ampVelTrack"] = str(props["ampVelTrack"])
+        import io
+        buf = io.BytesIO()
+        tree = ET.ElementTree(root)
+        tree.write(buf, encoding="utf-8", xml_declaration=True)
+        new_xml = buf.getvalue().decode("utf-8")
+        self.xml_editor.setPlainText(new_xml)
+        # Also update in-memory xml_root so Design tab reflects changes
+        try:
+            self.xml_root = ET.fromstring(new_xml)
+        except Exception:
+            pass
+        self._last_project_properties = props
 
 def main():
     import sys
