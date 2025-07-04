@@ -1,4 +1,7 @@
-from PyQt5.QtWidgets import QWidget, QSizePolicy, QLineEdit, QPushButton, QFormLayout, QLabel
+from PyQt5.QtWidgets import (
+    QWidget, QSizePolicy, QLineEdit, QPushButton, QFormLayout, QLabel,
+    QHBoxLayout, QColorDialog
+)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QPainter, QColor
 from widgets import DraggableElementLabel
@@ -149,26 +152,99 @@ class VisualCanvas(QWidget):
     def update_properties_panel(self, element):
         if not self.properties_panel:
             return
-        for i in reversed(range(self.properties_panel.layout().count())):
-            widget = self.properties_panel.layout().itemAt(i).widget()
-            if widget:
-                widget.setParent(None)
+        def clear_layout(layout):
+            while layout.count():
+                item = layout.takeAt(0)
+                widget = item.widget()
+                child_layout = item.layout()
+                if widget is not None:
+                    widget.setParent(None)
+                elif child_layout is not None:
+                    clear_layout(child_layout)
+        clear_layout(self.properties_panel.layout())
         layout = self.properties_panel.layout()
         layout.addWidget(QLabel("Properties Panel\n(Attributes for selected element)"))
         fields = {}
         base_keys = ["x", "y", "width", "height", "label"]
         shown_keys = set()
         for key in base_keys:
-            edit = QLineEdit(str(element.attrs.get(key, "")))
+            edit = QLineEdit()
+            edit.setText(str(element.attrs.get(key, "")))
             layout.addRow(f"{key}:", edit)
             fields[key] = edit
             shown_keys.add(key)
         for key in sorted(element.attrs.keys()):
-            if key in shown_keys or key == "type":
+            if key in shown_keys or key == "type" or key == "textColorOverride":
                 continue
-            edit = QLineEdit(str(element.attrs.get(key, "")))
+            edit = QLineEdit()
+            edit.setText(str(element.attrs.get(key, "")))
             layout.addRow(f"{key}:", edit)
             fields[key] = edit
+
+        # --- Text Color Override Color Picker ---
+        # Only show for widgets that support text color
+        text_color_supported = any(
+            k in element.attrs for k in ["textColor", "textColorOverride", "label", "text"]
+        )
+        if text_color_supported:
+            color_layout = QHBoxLayout()
+            color_edit = QLineEdit()
+            color_edit.setPlaceholderText("#RRGGBB or #AARRGGBB")
+            color_edit.setText(str(element.attrs.get("textColorOverride") or ""))
+            color_btn = QPushButton("Text Color…")
+            color_layout.addWidget(color_edit)
+            color_layout.addWidget(color_btn)
+            layout.addRow("Text Color Override", color_layout)
+
+            def pick_text_color():
+                current = color_edit.text().strip()
+                if current:
+                    try:
+                        color = QColor(current)
+                    except Exception:
+                        color = QColor("#000000")
+                else:
+                    color = QColor("#000000")
+                color = QColorDialog.getColor(color, self, "Select Text Color")
+                if color.isValid():
+                    # Use ARGB hex if alpha < 255, else RGB hex
+                    if color.alpha() < 255:
+                        hex_str = color.name(QColor.HexArgb)
+                    else:
+                        hex_str = color.name(QColor.HexRgb)
+                    color_edit.setText(hex_str)
+                    element.attrs["textColorOverride"] = hex_str.lstrip("#")
+                    if hasattr(element, "update"):
+                        element.update()
+                    if hasattr(element.parent(), "update_xml_from_canvas"):
+                        element.parent().update_xml_from_canvas()
+            color_btn.clicked.connect(pick_text_color)
+
+            def on_color_edit():
+                val = color_edit.text().strip()
+                if val == "":
+                    element.attrs["textColorOverride"] = None
+                else:
+                    element.attrs["textColorOverride"] = val.lstrip("#")
+                if hasattr(element, "update"):
+                    element.update()
+                if hasattr(element.parent(), "update_xml_from_canvas"):
+                    element.parent().update_xml_from_canvas()
+            color_edit.editingFinished.connect(on_color_edit)
+
+            # --- Text Size Override ---
+            from PyQt5.QtWidgets import QSpinBox
+            text_size_spin = QSpinBox()
+            text_size_spin.setRange(6, 96)
+            text_size_spin.setValue(int(element.attrs.get("textSize", 14)))
+            layout.addRow("Text Size", text_size_spin)
+            def on_text_size_change(val):
+                element.attrs["textSize"] = val
+                if hasattr(element, "update"):
+                    element.update()
+                if hasattr(element.parent(), "update_xml_from_canvas"):
+                    element.parent().update_xml_from_canvas()
+            text_size_spin.valueChanged.connect(on_text_size_change)
         def on_attr_change():
             try:
                 import commands
@@ -179,10 +255,16 @@ class VisualCanvas(QWidget):
                     val = edit.text()
                     if key in ["x", "y", "width", "height"]:
                         try:
-                            val = int(val)
+                            val_int = int(val)
                         except Exception:
+                            from PyQt5.QtWidgets import QMessageBox
                             QMessageBox.warning(self, "Invalid Value", f"{key} must be an integer.")
-                            val = 0
+                            # Revert to previous value
+                            edit.blockSignals(True)
+                            edit.setText(str(old_val))
+                            edit.blockSignals(False)
+                            continue
+                        val = val_int
                     if val != old_val and undo_stack:
                         # Push an EditPropertyCommand for this property change
                         def setter(v, k=key, elem=element):
@@ -198,8 +280,11 @@ class VisualCanvas(QWidget):
                         if hasattr(element, "update_from_attrs"):
                             element.update_from_attrs()
                 self.update_xml_from_canvas()
+                # Do NOT refresh the Properties Panel here to avoid deleting widgets during signal handling
             except Exception as e:
+                from PyQt5.QtWidgets import QMessageBox
                 QMessageBox.critical(self, "Edit Error", f"Failed to update element:\n{e}")
+        # Only connect editingFinished after all QLineEdits are set up
         for edit in fields.values():
             edit.editingFinished.connect(on_attr_change)
         del_btn = QPushButton("Delete Element")
@@ -348,6 +433,16 @@ class VisualCanvas(QWidget):
             attr_keys = ["x", "y", "width", "height", "label"]
             attr_keys += sorted([k for k in elem.attrs if k not in attr_keys and k != "type"])
             for k in attr_keys:
+                if k == "textColorOverride":
+                    # Write as textColor if set, skip writing textColorOverride as its own attribute
+                    val = elem.attrs.get("textColorOverride")
+                    if val:
+                        widget_el.set("textColor", str(val))
+                    continue
+                if k == "textColor":
+                    # Only write textColor if textColorOverride is not set
+                    if elem.attrs.get("textColorOverride"):
+                        continue
                 if k in elem.attrs and k != "type":
                     widget_el.set(k, str(elem.attrs[k]))
 

@@ -87,8 +87,7 @@ class ResizableDraggableLabel(QLabel):
             if hasattr(self, "attrs"):
                 self.attrs["x"] = self.x()
                 self.attrs["y"] = self.y()
-            if hasattr(self.parent(), "update_properties_panel"):
-                self.parent().update_properties_panel(self)
+            # Do not update properties panel during drag/resize
             if hasattr(self.parent(), "update_xml_from_canvas"):
                 self.parent().update_xml_from_canvas()
             return
@@ -134,6 +133,7 @@ class ResizableDraggableLabel(QLabel):
         self.resize_dir = None
         self.offset = None
         self.setCursor(QCursor(Qt.ArrowCursor))
+        # Only update properties panel after drag/resize is finished
         if hasattr(self.parent(), "update_properties_panel"):
             self.parent().update_properties_panel(self)
         super().mouseReleaseEvent(event)
@@ -225,8 +225,7 @@ class ResizableDraggableLabel(QLabel):
                 self.attrs["height"] = new_h
                 self.attrs["x"] = new_x
                 self.attrs["y"] = new_y
-            if hasattr(self.parent(), "update_properties_panel"):
-                self.parent().update_properties_panel(self)
+            # Do not update properties panel during drag/resize
             if hasattr(self.parent(), "update_xml_from_canvas"):
                 self.parent().update_xml_from_canvas()
             self.update()
@@ -245,8 +244,8 @@ class IconWidget(ResizableDraggableLabel):
         self.update_from_attrs()
 
     def update_style(self):
-        # Use high-contrast border for accessibility
-        self.setStyleSheet("background: #fff; border: 2px solid #222; padding: 2px;")
+        # Use high-contrast border for accessibility, but transparent background
+        self.setStyleSheet("border: 2px solid #222; padding: 2px;")
 
     def update_from_attrs(self):
         x = int(self.attrs.get("x", 0))
@@ -285,6 +284,7 @@ class KnobWidget(IconWidget):
         super().__init__("🎛️", "Knob", {
             "type": "Knob", "x": 0, "y": 0, "width": 80, "height": 80
         }, parent)
+        self.attrs["textColorOverride"] = None
 
     def update_from_attrs(self):
         # Enforce fixed height for layout: 95px, with minor +/- 5px for textSize if present
@@ -318,36 +318,35 @@ class SliderWidget(IconWidget):
         super().__init__("🎚️", "Slider", {
             "type": "Slider", "x": 0, "y": 0, "width": 120, "height": 30
         }, parent)
+        self.attrs["textColorOverride"] = None
 
 class ButtonWidget(IconWidget):
     def __init__(self, parent=None):
         super().__init__("🔘", "Button", {
             "type": "Button", "x": 0, "y": 0, "width": 80, "height": 30
         }, parent)
+        self.attrs["textColorOverride"] = None
 
 class MenuWidget(IconWidget):
     def __init__(self, parent=None):
         super().__init__("📋", "Menu", {
             "type": "Menu", "x": 0, "y": 0, "width": 100, "height": 30
         }, parent)
+        self.attrs["textColorOverride"] = None
 
 class LabelWidget(IconWidget):
     def __init__(self, parent=None):
         super().__init__("🏷️", "Label", {
             "type": "Label", "x": 0, "y": 0, "width": 80, "height": 30
         }, parent)
+        self.attrs["textColorOverride"] = None
 
     def paintEvent(self, event):
-        super().paintEvent(event)
+        # Do NOT call super().paintEvent(event) to avoid double-drawing the label
         w, h = self.width(), self.height()
         painter = QPainter(self)
-        # Draw label background for contrast
-        bg_radius = int(min(w, h) * 0.18)
-        bg_color = QColor(255, 255, 255, 220)  # semi-transparent white
-        painter.setRenderHint(QPainter.Antialiasing)
-        painter.setBrush(bg_color)
-        painter.setPen(Qt.NoPen)
-        painter.drawRoundedRect(4, 4, w-8, h-8, bg_radius, bg_radius)
+        # No background fill: transparent widget body
+
         # Draw label text with correct color and size
         label = self.attrs.get("label", self.attrs.get("text", ""))
         text_size = 14
@@ -360,9 +359,26 @@ class LabelWidget(IconWidget):
         font.setPointSize(text_size)
         font.setBold(True)
         painter.setFont(font)
-        # Parse textColor (ARGB hex)
-        color_str = self.attrs.get("textColor", "FF000000")
-        try:
+        # Use textColorOverride if set, else fallback to textColor, else black
+        color_hex = self.attrs.get("textColorOverride")
+        if color_hex:
+            if color_hex.startswith("#"):
+                color_hex = color_hex[1:]
+            if len(color_hex) == 8:
+                a = int(color_hex[0:2], 16)
+                r = int(color_hex[2:4], 16)
+                g = int(color_hex[4:6], 16)
+                b = int(color_hex[6:8], 16)
+                color = QColor(r, g, b, a)
+            elif len(color_hex) == 6:
+                r = int(color_hex[0:2], 16)
+                g = int(color_hex[2:4], 16)
+                b = int(color_hex[4:6], 16)
+                color = QColor(r, g, b)
+            else:
+                color = QColor(0, 0, 0)
+        else:
+            color_str = self.attrs.get("textColor", "FF000000")
             if color_str.startswith("#"):
                 color_str = color_str[1:]
             if len(color_str) == 8:
@@ -378,8 +394,6 @@ class LabelWidget(IconWidget):
                 color = QColor(r, g, b)
             else:
                 color = QColor(0, 0, 0)
-        except Exception:
-            color = QColor(0, 0, 0)
         # Draw drop shadow
         shadow_color = QColor(0, 0, 0, 120)
         painter.setPen(shadow_color)
@@ -408,6 +422,7 @@ class DraggableElementLabel(ResizableDraggableLabel):
                 "height": 30,
                 "label": "",
             }
+        self.attrs["textColorOverride"] = None
 
     def update_style(self):
         # No-op for compatibility
