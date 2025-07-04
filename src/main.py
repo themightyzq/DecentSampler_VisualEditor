@@ -1,7 +1,7 @@
 import os
 import xml.etree.ElementTree as ET
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QFileDialog, QAction, QMessageBox, QSplitter, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPlainTextEdit, QDockWidget, QSizePolicy
+    QApplication, QMainWindow, QFileDialog, QAction, QMessageBox, QSplitter, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPlainTextEdit, QDockWidget, QSizePolicy, QLineEdit, QPushButton
 )
 from PyQt5.QtCore import Qt, QSettings
 from PyQt5.QtGui import QKeySequence
@@ -379,10 +379,37 @@ class MainWindow(QMainWindow):
         xml_layout = QVBoxLayout()
         xml_layout.setContentsMargins(5, 5, 5, 5)
         xml_layout.setSpacing(10)
+
+        # --- Find/Replace Bar for XML Editor ---
+        self.xml_find_bar = QHBoxLayout()
+        self.xml_find_input = QLineEdit()
+        self.xml_find_input.setPlaceholderText("Find")
+        self.xml_replace_input = QLineEdit()
+        self.xml_replace_input.setPlaceholderText("Replace")
+        self.xml_find_next_btn = QPushButton("Find Next")
+        self.xml_replace_btn = QPushButton("Replace")
+        self.xml_replace_all_btn = QPushButton("Replace All")
+        self.xml_find_bar.addWidget(QLabel("Find:"))
+        self.xml_find_bar.addWidget(self.xml_find_input)
+        self.xml_find_bar.addWidget(QLabel("Replace:"))
+        self.xml_find_bar.addWidget(self.xml_replace_input)
+        self.xml_find_bar.addWidget(self.xml_find_next_btn)
+        self.xml_find_bar.addWidget(self.xml_replace_btn)
+        self.xml_find_bar.addWidget(self.xml_replace_all_btn)
+        xml_layout.addLayout(self.xml_find_bar)
+
         self.xml_editor = QPlainTextEdit()
         self.xml_editor.setAcceptDrops(False)
         xml_layout.addWidget(self.xml_editor)
         xml_tab.setLayout(xml_layout)
+
+        # Find/Replace logic
+        self._xml_find_pos = 0
+        self.xml_find_next_btn.clicked.connect(self.find_next_in_xml)
+        self.xml_replace_btn.clicked.connect(self.replace_in_xml)
+        self.xml_replace_all_btn.clicked.connect(self.replace_all_in_xml)
+        self.xml_find_input.returnPressed.connect(self.find_next_in_xml)
+        self.xml_replace_input.returnPressed.connect(self.replace_in_xml)
 
         self.editor_tabs.addTab(design_tab, "Design")
         self.editor_tabs.addTab(xml_tab, "XML")
@@ -637,6 +664,47 @@ class MainWindow(QMainWindow):
             if hasattr(main_canvas, "main_window") and hasattr(main_canvas.main_window, "xml_editor"):
                 # xml_editor is already updated by update_xml_from_canvas
                 pass
+
+    # --- Find/Replace Methods for XML Editor ---
+    def find_next_in_xml(self):
+        text = self.xml_editor.toPlainText()
+        find_str = self.xml_find_input.text()
+        if not find_str:
+            return
+        cursor = self.xml_editor.textCursor()
+        start = cursor.selectionEnd() if cursor.hasSelection() else cursor.position()
+        idx = text.find(find_str, start)
+        if idx == -1 and start > 0:
+            # Wrap around
+            idx = text.find(find_str, 0)
+        if idx != -1:
+            cursor.setPosition(idx)
+            cursor.setPosition(idx + len(find_str), cursor.KeepAnchor)
+            self.xml_editor.setTextCursor(cursor)
+            self.xml_editor.ensureCursorVisible()
+            self._xml_find_pos = idx + len(find_str)
+        else:
+            # Not found, clear selection
+            cursor.clearSelection()
+            self.xml_editor.setTextCursor(cursor)
+
+    def replace_in_xml(self):
+        cursor = self.xml_editor.textCursor()
+        find_str = self.xml_find_input.text()
+        replace_str = self.xml_replace_input.text()
+        if cursor.hasSelection() and cursor.selectedText() == find_str:
+            cursor.insertText(replace_str)
+        self.find_next_in_xml()
+
+    def replace_all_in_xml(self):
+        text = self.xml_editor.toPlainText()
+        find_str = self.xml_find_input.text()
+        replace_str = self.xml_replace_input.text()
+        if not find_str:
+            return
+        new_text = text.replace(find_str, replace_str)
+        if new_text != text:
+            self.xml_editor.setPlainText(new_text)
 
 def main():
     import sys
