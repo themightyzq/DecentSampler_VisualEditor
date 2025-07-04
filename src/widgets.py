@@ -61,6 +61,7 @@ class ResizableDraggableLabel(QLabel):
                 self.dragging = True
                 self.resizing = False
                 self.offset = event.pos()
+                self._drag_orig_pos = self.pos()
             if hasattr(self.parent(), "select_element"):
                 self.parent().select_element(self)
             self.update_style()
@@ -100,6 +101,34 @@ class ResizableDraggableLabel(QLabel):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        import commands
+        parent_canvas = self.parent() if hasattr(self, "parent") else None
+        main_window = parent_canvas.main_window if parent_canvas and hasattr(parent_canvas, "main_window") else None
+        undo_stack = main_window.undo_stack if main_window and hasattr(main_window, "undo_stack") else None
+
+        # Handle move undo/redo
+        if hasattr(self, "_drag_orig_pos") and not self.resizing and self.dragging:
+            old_pos = (self._drag_orig_pos.x(), self._drag_orig_pos.y())
+            new_pos = (self.x(), self.y())
+            if old_pos != new_pos and undo_stack:
+                cmd = commands.MoveWidgetCommand(self, old_pos, new_pos)
+                undo_stack.push(cmd)
+            self._drag_orig_pos = None
+
+        # Handle resize undo/redo
+        if hasattr(self, "_resize_orig_geom") and self.resizing:
+            old_geom = (
+                self._resize_orig_geom.x(),
+                self._resize_orig_geom.y(),
+                self._resize_orig_geom.width(),
+                self._resize_orig_geom.height(),
+            )
+            new_geom = (self.x(), self.y(), self.width(), self.height())
+            if old_geom != new_geom and undo_stack:
+                cmd = commands.ResizeWidgetCommand(self, old_geom, new_geom)
+                undo_stack.push(cmd)
+            self._resize_orig_geom = None
+
         self.dragging = False
         self.resizing = False
         self.resize_dir = None

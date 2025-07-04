@@ -5,6 +5,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QSettings
 from PyQt5.QtGui import QKeySequence
+from PyQt5.QtWidgets import QUndoStack
+import commands
 
 from widgets import DraggableElementLabel
 from canvas import VisualCanvas
@@ -20,6 +22,7 @@ from widgets import KnobWidget, SliderWidget, ButtonWidget, MenuWidget, LabelWid
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.undo_stack = QUndoStack(self)
         self.settings = QSettings("DecentSamplerEditor", "DecentSamplerEditorApp")
         self.setWindowTitle("Decent Sampler Visual Editor")
         self.setGeometry(100, 100, 1200, 900)
@@ -38,6 +41,8 @@ class MainWindow(QMainWindow):
         self.advanced_mode = self.settings.value("advanced_mode", False, type=bool)
         self._createCentralWidget()
         self._createMenuBar()
+        # Connect undo/redo to sync method
+        self.undo_stack.indexChanged.connect(self.sync_views_after_undo_redo)
         if not hasattr(self, "xml_root") or self.xml_root is None or not self.xml_editor.toPlainText().strip():
             self.new_project()
 
@@ -56,6 +61,21 @@ class MainWindow(QMainWindow):
 
     def _createMenuBar(self):
         menubar = self.menuBar()
+        # --- Edit Menu for Undo/Redo ---
+        edit_menu = menubar.addMenu("Edit")
+        undo_action = QAction("Undo", self)
+        undo_action.setShortcut(QKeySequence.Undo)
+        undo_action.triggered.connect(self.undo_stack.undo)
+        edit_menu.addAction(undo_action)
+        redo_action = QAction("Redo", self)
+        redo_action.setShortcut(QKeySequence.Redo)
+        redo_action.triggered.connect(self.undo_stack.redo)
+        edit_menu.addAction(redo_action)
+        # Global shortcuts
+        from PyQt5.QtWidgets import QShortcut
+        QShortcut(QKeySequence.Undo, self, activated=self.undo_stack.undo)
+        QShortcut(QKeySequence.Redo, self, activated=self.undo_stack.redo)
+
         file_menu = menubar.addMenu("File")
         new_action = QAction("New", self)
         new_action.setShortcut(QKeySequence.New)
@@ -292,7 +312,7 @@ class MainWindow(QMainWindow):
         self.addDockWidget(Qt.LeftDockWidgetArea, self.sample_dock)
 
         # Group Properties Dock
-        self.group_properties = GroupPropertiesWidget()
+        self.group_properties = GroupPropertiesWidget(main_window=self)
         self.group_properties.setMinimumWidth(180)
         self.group_properties.setToolTip("Edit group envelope and velocity mapping")
         self.group_dock = QDockWidget("Group Envelope", self)
@@ -382,6 +402,8 @@ class MainWindow(QMainWindow):
 
     def _on_tab_changed(self, idx):
         # 0 = Design, 1 = XML
+        if not hasattr(self, "_last_xml_text"):
+            self._last_xml_text = ""
         if idx == 1:
             # Before switching to XML tab, sync all canvases to XML
             for i in range(self.tab_widget.count()):
@@ -390,7 +412,17 @@ class MainWindow(QMainWindow):
                     canvas.update_xml_from_canvas()
             # XML tab: make editor editable
             self.xml_editor.setReadOnly(False)
+            # Track the XML text for undo/redo
+            self._last_xml_text = self.xml_editor.toPlainText()
         else:
+            # Leaving XML tab: if XML changed, push XmlEditCommand
+            new_xml = self.xml_editor.toPlainText()
+            old_xml = getattr(self, "_last_xml_text", "")
+            if new_xml != old_xml and hasattr(self, "undo_stack"):
+                import commands
+                cmd = commands.XmlEditCommand(self, old_xml, new_xml)
+                self.undo_stack.push(cmd)
+                self._last_xml_text = new_xml
             # Design tab: try to parse XML and update xml_root and canvas
             xml_text = self.xml_editor.toPlainText()
             import xml.etree.ElementTree as ET
@@ -593,6 +625,18 @@ class MainWindow(QMainWindow):
         self.tab_widget.addTab(canvas, "main")
         self.visual_canvases["main"] = canvas
         self.tab_widget.setCurrentIndex(0)
+
+    def sync_views_after_undo_redo(self, idx):
+        # Sync all canvases and XML editor after undo/redo
+        for canvas in self.visual_canvases.values():
+            if hasattr(canvas, "update_xml_from_canvas"):
+                canvas.update_xml_from_canvas()
+        # Optionally, update the XML editor with the main canvas's XML
+        if "main" in self.visual_canvases:
+            main_canvas = self.visual_canvases["main"]
+            if hasattr(main_canvas, "main_window") and hasattr(main_canvas.main_window, "xml_editor"):
+                # xml_editor is already updated by update_xml_from_canvas
+                pass
 
 def main():
     import sys

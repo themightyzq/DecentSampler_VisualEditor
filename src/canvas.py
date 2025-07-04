@@ -7,6 +7,7 @@ class VisualCanvas(QWidget):
     def __init__(self, parent=None, main_window=None):
         super().__init__(parent)
         self.setAcceptDrops(True)
+        self.setFocusPolicy(Qt.StrongFocus)
         self.setStyleSheet("border: 1px solid #bbb;")
         self.setMinimumSize(400, 400)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -72,8 +73,8 @@ class VisualCanvas(QWidget):
     def dropEvent(self, event):
         try:
             text = event.mimeData().text()
-            # Map text to widget class
             from widgets import KnobWidget, SliderWidget, ButtonWidget, MenuWidget, LabelWidget
+            import commands
             widget_map = {
                 "Knob": KnobWidget,
                 "Slider": SliderWidget,
@@ -83,11 +84,10 @@ class VisualCanvas(QWidget):
             }
             widget_class = widget_map.get(text, DraggableElementLabel)
             pos = event.pos()
-            # Clamp y for KnobWidget so y + 100px does not exceed canvas height
             x = pos.x()
             y = pos.y()
             if widget_class.__name__ == "KnobWidget":
-                knob_height = 100  # Reserve at least 100px vertical space
+                knob_height = 100
                 max_y = max(0, self.height() - knob_height)
                 y = min(y, max_y)
             attrs = {
@@ -95,17 +95,22 @@ class VisualCanvas(QWidget):
                 "x": x,
                 "y": y,
             }
-            w = widget_class(text, self) if widget_class is DraggableElementLabel else widget_class(self)
-            if hasattr(w, "attrs"):
-                w.attrs.update(attrs)
-                if hasattr(w, "update_from_attrs"):
-                    w.update_from_attrs()
-            w.move(x, y)
-            w.show()
-            w.raise_()
-            self.elements.append(w)
-            self.select_element(w)
-            self.update_xml_from_canvas()
+            if self.main_window and hasattr(self.main_window, "undo_stack"):
+                cmd = commands.AddWidgetCommand(self, widget_class, attrs, select_after=True)
+                self.main_window.undo_stack.push(cmd)
+            else:
+                # fallback: direct add (should not happen)
+                w = widget_class(text, self) if widget_class is DraggableElementLabel else widget_class(self)
+                if hasattr(w, "attrs"):
+                    w.attrs.update(attrs)
+                    if hasattr(w, "update_from_attrs"):
+                        w.update_from_attrs()
+                w.move(x, y)
+                w.show()
+                w.raise_()
+                self.elements.append(w)
+                self.select_element(w)
+                self.update_xml_from_canvas()
             if self.main_window and hasattr(self.main_window, "visual_canvases"):
                 if "main" not in self.main_window.visual_canvases.values():
                     self.main_window.visual_canvases["main"] = self
@@ -153,7 +158,11 @@ class VisualCanvas(QWidget):
             fields[key] = edit
         def on_attr_change():
             try:
+                import commands
+                main_window = self.main_window if hasattr(self, "main_window") else None
+                undo_stack = main_window.undo_stack if main_window and hasattr(main_window, "undo_stack") else None
                 for key, edit in fields.items():
+                    old_val = element.attrs.get(key, "")
                     val = edit.text()
                     if key in ["x", "y", "width", "height"]:
                         try:
@@ -161,8 +170,20 @@ class VisualCanvas(QWidget):
                         except Exception:
                             QMessageBox.warning(self, "Invalid Value", f"{key} must be an integer.")
                             val = 0
-                    element.attrs[key] = val
-                element.update_from_attrs()
+                    if val != old_val and undo_stack:
+                        # Push an EditPropertyCommand for this property change
+                        def setter(v, k=key, elem=element):
+                            elem.attrs[k] = v
+                            if hasattr(elem, "update_from_attrs"):
+                                elem.update_from_attrs()
+                        cmd = commands.EditPropertyCommand(
+                            element, key, old_val, val, setter=setter, description=f"Edit {key}"
+                        )
+                        undo_stack.push(cmd)
+                    else:
+                        element.attrs[key] = val
+                        if hasattr(element, "update_from_attrs"):
+                            element.update_from_attrs()
                 self.update_xml_from_canvas()
             except Exception as e:
                 QMessageBox.critical(self, "Edit Error", f"Failed to update element:\n{e}")
@@ -189,9 +210,14 @@ class VisualCanvas(QWidget):
 
     def delete_selected_element(self):
         if self.selected_element:
-            self.selected_element.setParent(None)
-            if self.selected_element in self.elements:
-                self.elements.remove(self.selected_element)
+            import commands
+            if self.main_window and hasattr(self.main_window, "undo_stack"):
+                cmd = commands.DeleteWidgetCommand(self, self.selected_element)
+                self.main_window.undo_stack.push(cmd)
+            else:
+                self.selected_element.setParent(None)
+                if self.selected_element in self.elements:
+                    self.elements.remove(self.selected_element)
             self.selected_element = None
             if self.properties_panel:
                 for i in reversed(range(self.properties_panel.layout().count())):
@@ -205,7 +231,6 @@ class VisualCanvas(QWidget):
             attrs = dict(self.selected_element.attrs)
             attrs["x"] = int(attrs.get("x", 0)) + 20
             attrs["y"] = int(attrs.get("y", 0)) + 20
-            # Use the same widget class as in dropEvent
             from widgets import KnobWidget, SliderWidget, ButtonWidget, MenuWidget, LabelWidget, DraggableElementLabel
             widget_map = {
                 "Knob": KnobWidget,
@@ -216,22 +241,26 @@ class VisualCanvas(QWidget):
             }
             widget_type = attrs.get("type", "")
             widget_class = widget_map.get(widget_type, DraggableElementLabel)
-            # Clamp y for KnobWidget so y + 100px does not exceed canvas height
             if widget_class.__name__ == "KnobWidget":
                 knob_height = 100
                 max_y = max(0, self.height() - knob_height)
                 attrs["y"] = min(attrs["y"], max_y)
-            label = widget_class(widget_type, self) if widget_class is DraggableElementLabel else widget_class(self)
-            if hasattr(label, "attrs"):
-                label.attrs = dict(attrs)
-                if hasattr(label, "update_from_attrs"):
-                    label.update_from_attrs()
-            label.show()
-            if hasattr(label, "setToolTip"):
-                label.setToolTip(f"{widget_type} (duplicated)")
-            self.elements.append(label)
-            self.select_element(label)
-            self.update_xml_from_canvas()
+            import commands
+            if self.main_window and hasattr(self.main_window, "undo_stack"):
+                cmd = commands.AddWidgetCommand(self, widget_class, attrs, select_after=True)
+                self.main_window.undo_stack.push(cmd)
+            else:
+                label = widget_class(widget_type, self) if widget_class is DraggableElementLabel else widget_class(self)
+                if hasattr(label, "attrs"):
+                    label.attrs = dict(attrs)
+                    if hasattr(label, "update_from_attrs"):
+                        label.update_from_attrs()
+                label.show()
+                if hasattr(label, "setToolTip"):
+                    label.setToolTip(f"{widget_type} (duplicated)")
+                self.elements.append(label)
+                self.select_element(label)
+                self.update_xml_from_canvas()
 
     def copy_selected_element(self):
         if self.selected_element:
@@ -242,7 +271,6 @@ class VisualCanvas(QWidget):
             attrs = dict(self.clipboard)
             attrs["x"] = int(attrs.get("x", 0)) + 20
             attrs["y"] = int(attrs.get("y", 0)) + 20
-            # Use the same widget class as in dropEvent
             from widgets import KnobWidget, SliderWidget, ButtonWidget, MenuWidget, LabelWidget, DraggableElementLabel
             widget_map = {
                 "Knob": KnobWidget,
@@ -253,27 +281,32 @@ class VisualCanvas(QWidget):
             }
             widget_type = attrs.get("type", "")
             widget_class = widget_map.get(widget_type, DraggableElementLabel)
-            # Clamp y for KnobWidget so y + 100px does not exceed canvas height
             if widget_class.__name__ == "KnobWidget":
                 knob_height = 100
                 max_y = max(0, self.height() - knob_height)
                 attrs["y"] = min(attrs["y"], max_y)
-            label = widget_class(widget_type, self) if widget_class is DraggableElementLabel else widget_class(self)
-            if hasattr(label, "attrs"):
-                label.attrs = dict(attrs)
-                if hasattr(label, "update_from_attrs"):
-                    label.update_from_attrs()
-            label.show()
-            if hasattr(label, "setToolTip"):
-                label.setToolTip(f"{widget_type} (pasted)")
-            self.elements.append(label)
-            self.select_element(label)
-            self.update_xml_from_canvas()
+            import commands
+            if self.main_window and hasattr(self.main_window, "undo_stack"):
+                cmd = commands.AddWidgetCommand(self, widget_class, attrs, select_after=True)
+                self.main_window.undo_stack.push(cmd)
+            else:
+                label = widget_class(widget_type, self) if widget_class is DraggableElementLabel else widget_class(self)
+                if hasattr(label, "attrs"):
+                    label.attrs = dict(attrs)
+                    if hasattr(label, "update_from_attrs"):
+                        label.update_from_attrs()
+                label.show()
+                if hasattr(label, "setToolTip"):
+                    label.setToolTip(f"{widget_type} (pasted)")
+                self.elements.append(label)
+                self.select_element(label)
+                self.update_xml_from_canvas()
 
     def update_xml_from_canvas(self):
         """
         Sync the current canvas elements to the XML and update the xml_editor in MainWindow.
         Uses main_window.xml_root as the source of truth, not the possibly-edited xml_editor text.
+        Ensures output matches Decent Sampler's formatting and structure.
         """
         if not self.main_window or not hasattr(self.main_window, "xml_editor") or not hasattr(self.main_window, "xml_root"):
             return
@@ -284,12 +317,12 @@ class VisualCanvas(QWidget):
         if root is None:
             return
 
-        # Find or create the <ui> or <tab> element
+        # Find or create the <ui> element
         ui_elem = root.find(".//ui")
         if ui_elem is None:
             ui_elem = ET.SubElement(root, "ui", {"width": "812", "height": "375"})
 
-        # Only remove widget elements, not non-widget children like <keyboard>
+        # Remove only widget elements, not non-widget children like <keyboard>
         widget_tags = {"knob", "slider", "button", "menu", "label", "labeled-knob", "control"}
         for child in list(ui_elem):
             if child.tag.lower() in widget_tags:
@@ -298,18 +331,43 @@ class VisualCanvas(QWidget):
         # Add current canvas elements as XML children
         for elem in self.elements:
             widget_el = ET.SubElement(ui_elem, elem.attrs["type"].lower())
-            for k, v in elem.attrs.items():
-                if k == "type":
-                    continue
-                widget_el.set(k, str(v))
+            # Order attributes: x, y, width, height, label, then others alphabetically
+            attr_keys = ["x", "y", "width", "height", "label"]
+            attr_keys += sorted([k for k in elem.attrs if k not in attr_keys and k != "type"])
+            for k in attr_keys:
+                if k in elem.attrs and k != "type":
+                    widget_el.set(k, str(elem.attrs[k]))
 
-        # Write the updated XML back to the xml_editor
+        # Pretty-print function for ElementTree (in-place)
+        def indent(elem, level=0):
+            i = "\n" + level * "  "
+            if len(elem):
+                if not elem.text or not elem.text.strip():
+                    elem.text = i + "  "
+                for child in elem:
+                    indent(child, level + 1)
+                if not elem.tail or not elem.tail.strip():
+                    elem.tail = i
+            else:
+                if level and (not elem.tail or not elem.tail.strip()):
+                    elem.tail = i
+
+        indent(root)
+
+        # Write the updated XML back to the xml_editor with declaration and pretty-printing
         import io
         buf = io.BytesIO()
         tree = ET.ElementTree(root)
         tree.write(buf, encoding="utf-8", xml_declaration=True)
         xml_str = buf.getvalue().decode("utf-8")
         self.main_window.xml_editor.setPlainText(xml_str)
+
+        # Ensure the in-memory XML root is always in sync with the editor
+        try:
+            new_root = ET.fromstring(xml_str)
+            self.main_window.xml_root = new_root
+        except Exception as e:
+            print(f"[update_xml_from_canvas] Failed to re-parse XML: {e}")
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
