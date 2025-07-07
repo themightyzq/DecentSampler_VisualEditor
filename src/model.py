@@ -11,6 +11,15 @@ class SampleMapping:
     def __repr__(self):
         return f"SampleMapping(path={self.path!r}, lo={self.lo}, hi={self.hi}, root={self.root})"
 
+class UIElement:
+    def __init__(self, x, y, width, height, label, skin=None):
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.label = label
+        self.skin = skin  # path to skin image or None
+
 class InstrumentPreset:
     def __init__(
         self,
@@ -30,8 +39,11 @@ class InstrumentPreset:
         have_chorus: bool = False,
         have_reverb: bool = False,
         have_midicc1: bool = False,
+        no_attack: bool = False,
+        no_decay: bool = False,
         cut_all_by_all: bool = False,
-        silencing_mode: str = "normal"
+        silencing_mode: str = "normal",
+        ui_elements: Optional[list] = None
     ):
         self.name = name
         self.ui_width = ui_width
@@ -49,8 +61,12 @@ class InstrumentPreset:
         self.have_chorus = have_chorus
         self.have_reverb = have_reverb
         self.have_midicc1 = have_midicc1
+        self.no_attack = no_attack
+        self.no_decay = no_decay
         self.cut_all_by_all = cut_all_by_all
         self.silencing_mode = silencing_mode
+        self.ui = type("UI", (), {})()
+        self.ui.elements = ui_elements if ui_elements is not None else []
 
     @staticmethod
     def from_dspreset(path: str) -> "InstrumentPreset":
@@ -63,6 +79,25 @@ class InstrumentPreset:
         bg_image = ui_elem.attrib.get("bgImage") if ui_elem is not None else None
         layout_mode = ui_elem.attrib.get("layoutMode", "relative") if ui_elem is not None else "relative"
         bg_mode = ui_elem.attrib.get("bgMode", "top_left") if ui_elem is not None else "top_left"
+        # DSPreset UI flags
+        have_reverb = ui_elem is not None and ui_elem.attrib.get("haveReverb", "false").lower() == "true"
+        have_tone = ui_elem is not None and ui_elem.attrib.get("haveTone", "false").lower() == "true"
+        have_chorus = ui_elem is not None and ui_elem.attrib.get("haveChorus", "false").lower() == "true"
+        have_midicc1 = ui_elem is not None and ui_elem.attrib.get("haveMidicc1", "false").lower() == "true"
+        no_attack = ui_elem is not None and ui_elem.attrib.get("noAttack", "false").lower() == "true"
+        no_decay = ui_elem is not None and ui_elem.attrib.get("noDecay", "false").lower() == "true"
+        # Parse UI elements
+        ui_elements = []
+        if ui_elem is not None:
+            for tab in ui_elem.findall("tab"):
+                for el in tab:
+                    x = int(el.attrib.get("x", 0))
+                    y = int(el.attrib.get("y", 0))
+                    w = int(el.attrib.get("width", 64))
+                    h = int(el.attrib.get("height", 64))
+                    label = el.attrib.get("label", el.tag)
+                    skin = el.attrib.get("skin", None)
+                    ui_elements.append(UIElement(x, y, w, h, label, skin))
         mappings = []
         groups_elem = root.find(".//groups")
         if groups_elem is not None:
@@ -73,9 +108,10 @@ class InstrumentPreset:
                     hi = int(sample.attrib.get("hiNote", 127))
                     root_note = int(sample.attrib.get("rootNote", 60))
                     mappings.append(SampleMapping(sample_path, lo, hi, root_note))
-        # TODO: Parse controls, effects, and other options from XML if present
         return InstrumentPreset(
-            name, ui_width, ui_height, bg_image, layout_mode, bg_mode, mappings
+            name, ui_width, ui_height, bg_image, layout_mode, bg_mode, mappings,
+            have_reverb=have_reverb, have_tone=have_tone, have_chorus=have_chorus, have_midicc1=have_midicc1,
+            no_attack=no_attack, no_decay=no_decay, ui_elements=ui_elements
         )
 
     def auto_map(self, folder_path: str):
@@ -105,11 +141,29 @@ class InstrumentPreset:
             "height": str(self.ui_height),
             "layoutMode": self.layout_mode,
             "bgMode": self.bg_mode,
+            "haveReverb": "true" if getattr(self, "have_reverb", False) else "false",
+            "haveTone": "true" if getattr(self, "have_tone", False) else "false",
+            "haveChorus": "true" if getattr(self, "have_chorus", False) else "false",
+            "haveMidicc1": "true" if getattr(self, "have_midicc1", False) else "false",
+            "noAttack": "true" if getattr(self, "no_attack", False) else "false",
+            "noDecay": "true" if getattr(self, "no_decay", False) else "false",
         }
         if self.bg_image:
             ui_attribs["bgImage"] = self.bg_image
         ui_elem = ET.SubElement(root, "ui", ui_attribs)
         tab_elem = ET.SubElement(ui_elem, "tab", {"name": "main"})
+        # Write UI elements
+        for el in getattr(self.ui, "elements", []):
+            attribs = {
+                "x": str(el.x),
+                "y": str(el.y),
+                "width": str(el.width),
+                "height": str(el.height),
+                "label": el.label
+            }
+            if el.skin:
+                attribs["skin"] = el.skin
+            ET.SubElement(tab_elem, "control", attribs)
 
         # Add controls as labeled-knobs with bindings
         knob_x = 200

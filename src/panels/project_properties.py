@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (
     QDockWidget, QWidget, QVBoxLayout, QFormLayout, QLabel,
-    QLineEdit, QSpinBox, QPushButton, QColorDialog, QFileDialog, QHBoxLayout
+    QLineEdit, QSpinBox, QPushButton, QColorDialog, QFileDialog, QHBoxLayout, QCheckBox
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon
@@ -46,6 +46,20 @@ class ProjectPropertiesPanel(QDockWidget):
         form_layout.addRow(QLabel("BG Image:"), self.bg_image_edit)
         form_layout.addRow("", self.bg_image_btn)
 
+        # DSPreset UI flags
+        self.reverb_checkbox = QCheckBox("Enable Reverb")
+        self.tone_checkbox = QCheckBox("Enable Tone")
+        self.chorus_checkbox = QCheckBox("Enable Chorus")
+        self.midicc1_checkbox = QCheckBox("Enable MIDI CC1")
+        self.no_attack_checkbox = QCheckBox("Disable Attack")
+        self.no_decay_checkbox = QCheckBox("Disable Decay")
+        form_layout.addRow(self.reverb_checkbox)
+        form_layout.addRow(self.tone_checkbox)
+        form_layout.addRow(self.chorus_checkbox)
+        form_layout.addRow(self.midicc1_checkbox)
+        form_layout.addRow(self.no_attack_checkbox)
+        form_layout.addRow(self.no_decay_checkbox)
+
         layout.addLayout(form_layout)
 
         widget.setLayout(layout)
@@ -56,6 +70,32 @@ class ProjectPropertiesPanel(QDockWidget):
         self.ui_width_spin.valueChanged.connect(self._live_update)
         self.ui_height_spin.valueChanged.connect(self._live_update)
         self.bg_image_edit.textChanged.connect(self._live_update)
+        self.reverb_checkbox.stateChanged.connect(self._flag_update)
+        self.tone_checkbox.stateChanged.connect(self._flag_update)
+        self.chorus_checkbox.stateChanged.connect(self._flag_update)
+        self.midicc1_checkbox.stateChanged.connect(self._flag_update)
+        self.no_attack_checkbox.stateChanged.connect(self._flag_update)
+        self.no_decay_checkbox.stateChanged.connect(self._flag_update)
+
+    def set_flags_from_preset(self, preset):
+        self.reverb_checkbox.setChecked(getattr(preset, "have_reverb", False))
+        self.tone_checkbox.setChecked(getattr(preset, "have_tone", False))
+        self.chorus_checkbox.setChecked(getattr(preset, "have_chorus", False))
+        self.midicc1_checkbox.setChecked(getattr(preset, "have_midicc1", False))
+        self.no_attack_checkbox.setChecked(getattr(preset, "no_attack", False))
+        self.no_decay_checkbox.setChecked(getattr(preset, "no_decay", False))
+
+    def _flag_update(self):
+        mw = self.parent()
+        if hasattr(mw, "preset"):
+            mw.preset.have_reverb = self.reverb_checkbox.isChecked()
+            mw.preset.have_tone = self.tone_checkbox.isChecked()
+            mw.preset.have_chorus = self.chorus_checkbox.isChecked()
+            mw.preset.have_midicc1 = self.midicc1_checkbox.isChecked()
+            mw.preset.no_attack = self.no_attack_checkbox.isChecked()
+            mw.preset.no_decay = self.no_decay_checkbox.isChecked()
+        if hasattr(mw, "preview_canvas") and hasattr(mw, "preset"):
+            mw.preview_canvas.set_preset(mw.preset, "")
 
     def browse_bg(self):
         file, _ = QFileDialog.getOpenFileName(self, "Select Background Image", "", "PNG Files (*.png)")
@@ -80,7 +120,15 @@ class ProjectPropertiesPanel(QDockWidget):
             mw.preset.ui_height = self.ui_height_spin.value()
             mw.preset.bg_image = self.bg_image_edit.text()
             mw.preset.bg_color = self.bg_color_edit.text()
+            mw.preset.have_reverb = self.reverb_checkbox.isChecked()
+            mw.preset.have_tone = self.tone_checkbox.isChecked()
+            mw.preset.have_chorus = self.chorus_checkbox.isChecked()
+            mw.preset.have_midicc1 = self.midicc1_checkbox.isChecked()
+            mw.preset.no_attack = self.no_attack_checkbox.isChecked()
+            mw.preset.no_decay = self.no_decay_checkbox.isChecked()
         if hasattr(mw, "preview_canvas") and hasattr(mw, "preset"):
-            # Resize preview_canvas if needed
+            # Resize preview_canvas and keyboard_widget if needed
             mw.preview_canvas.setFixedSize(mw.preset.ui_width, mw.preset.ui_height)
+            if hasattr(mw, "keyboard_widget"):
+                mw.keyboard_widget.setFixedWidth(mw.preset.ui_width)
             mw.preview_canvas.set_preset(mw.preset, "")
