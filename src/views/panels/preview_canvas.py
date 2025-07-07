@@ -26,11 +26,34 @@ class PreviewCanvas(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         w, h = self.width(), self.height()
+        # Fill BG color if set
+        bg_color = None
+        if self.preset and getattr(self.preset, "bg_color", None):
+            bg_color = QColor(self.preset.bg_color)
+        else:
+            bg_color = QColor("#f0f0f0")
+        painter.fillRect(self.rect(), bg_color)
         # Draw background image if available
         if self.bg_pixmap and not self.bg_pixmap.isNull():
             painter.drawPixmap(self.rect(), self.bg_pixmap)
-        else:
-            painter.fillRect(self.rect(), QColor("#f0f0f0"))
+
+        # Draw real UI controls
+        if self.preset and hasattr(self.preset, "ui") and hasattr(self.preset.ui, "elements"):
+            for el in self.preset.ui.elements:
+                rect = QRect(el.x, el.y, el.width, el.height)
+                if el.skin:
+                    pixmap = QPixmap(el.skin)
+                    if not pixmap.isNull():
+                        painter.drawPixmap(rect, pixmap)
+                    else:
+                        painter.setPen(Qt.red)
+                        painter.drawRect(rect)
+                else:
+                    painter.setPen(Qt.black)
+                    painter.setBrush(Qt.NoBrush)
+                    painter.drawRect(rect)
+                    painter.setFont(self.font())
+                    painter.drawText(rect, Qt.AlignCenter, el.label)
 
         # Draw preset name
         if self.preset:

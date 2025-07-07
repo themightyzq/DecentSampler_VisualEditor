@@ -27,16 +27,6 @@ class SampleMappingPanel(QWidget):
 
         # Mapping form
         form = QFormLayout()
-        self.path_edit = QLineEdit()
-        self.path_edit.setReadOnly(True)
-        self.path_edit.setToolTip("Current sample file path")
-        self.browse_btn = QPushButton("Browse Sample File")
-        self.browse_btn.setToolTip("Select a WAV sample for this mapping")
-        self.browse_btn.clicked.connect(self.browse_path)
-        path_row = QHBoxLayout()
-        path_row.addWidget(self.path_edit)
-        path_row.addWidget(self.browse_btn)
-        form.addRow("Sample Path", path_row)
 
         self.lo_spin = QSpinBox()
         self.lo_spin.setRange(0, 127)
@@ -97,7 +87,6 @@ class SampleMappingPanel(QWidget):
     def set_mapping(self, mapping):
         self.current_mapping = mapping
         if mapping is None:
-            self.path_edit.setText("")
             self.lo_spin.setValue(0)
             self.hi_spin.setValue(127)
             self.root_spin.setValue(60)
@@ -112,7 +101,6 @@ class SampleMappingPanel(QWidget):
             lo = getattr(mapping, "lo", 0)
             hi = getattr(mapping, "hi", 127)
             root = getattr(mapping, "root", 60)
-        self.path_edit.setText(path)
         self.lo_spin.setValue(lo)
         self.hi_spin.setValue(hi)
         self.root_spin.setValue(root)
@@ -157,30 +145,6 @@ class SampleMappingPanel(QWidget):
             if hasattr(self.main_window, "preview_canvas") and hasattr(self.main_window, "preset"):
                 self.main_window.preview_canvas.set_preset(self.main_window.preset, "")
 
-    def browse_path(self):
-        file, _ = QFileDialog.getOpenFileName(self, "Select Sample", "", "WAV Files (*.wav)")
-        if file and self.current_mapping is not None:
-            if isinstance(self.current_mapping, dict):
-                self.current_mapping["path"] = file
-                lo = self.current_mapping.get("lo", 0)
-                hi = self.current_mapping.get("hi", 0)
-                root = self.current_mapping.get("root", 0)
-            else:
-                setattr(self.current_mapping, "path", file)
-                lo = getattr(self.current_mapping, "lo", 0)
-                hi = getattr(self.current_mapping, "hi", 0)
-                root = getattr(self.current_mapping, "root", 0)
-            self.path_edit.setText(file)
-            # Update display
-            idx = self.samples.index(self.current_mapping)
-            item = self.list_widget.item(idx)
-            filename = file.split("/")[-1] if file else ""
-            display = f"{filename} — {midi_note_name(lo)}–{midi_note_name(hi)} (root {midi_note_name(root)})"
-            item.setText(display)
-            item.setToolTip(file)
-            # Live update preview
-            if hasattr(self.main_window, "preview_canvas") and hasattr(self.main_window, "preset"):
-                self.main_window.preview_canvas.set_preset(self.main_window.preset, "")
 
     def import_samples(self):
         files, _ = QFileDialog.getOpenFileNames(self, "Import WAV Samples", "", "WAV Files (*.wav)")
