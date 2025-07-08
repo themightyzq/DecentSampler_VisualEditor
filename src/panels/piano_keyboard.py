@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QSizePolicy
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QPainter, QColor
+from PyQt5.QtGui import QPainter, QColor, QPen
 from PyQt5.QtMultimedia import QSound
 import os
 
@@ -8,7 +8,6 @@ class PianoKeyboardWidget(QWidget):
     def __init__(self, parent=None, main_window=None):
         super().__init__(parent)
         self.setFixedHeight(80)
-        self.setFixedWidth(812)
         self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.num_keys = 88  # Full piano
         self.start_note = 21  # A0
@@ -17,8 +16,8 @@ class PianoKeyboardWidget(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         key_h = self.height()
-        num_keys = 88
-        start_note = 21  # A0
+        num_keys = self.num_keys
+        start_note = self.start_note
         white_key_count = 52  # 88-key piano has 52 white keys
         white_key_w = self.width() / white_key_count
         black_key_w = white_key_w * 0.7
@@ -37,11 +36,16 @@ class PianoKeyboardWidget(QWidget):
                 painter.setBrush(QColor(100, 200, 255, 80))
                 painter.setPen(Qt.NoPen)
                 painter.drawRect(int(lo_x), 0, int(hi_x - lo_x + white_key_w), int(key_h))
-                # Draw root note marker
+                # Draw root note marker (heavier border and dot)
                 root_x = self._key_x(root, white_key_w)
-                painter.setBrush(QColor(255, 100, 100, 180))
+                painter.setBrush(Qt.NoBrush)
+                painter.setPen(QColor(255, 100, 100, 255))
+                painter.setPen(QPen(QColor(255, 100, 100, 255), 3))
+                painter.drawRect(int(root_x), 0, int(white_key_w), int(key_h))
+                # Draw dot
+                painter.setBrush(QColor(255, 100, 100, 220))
                 painter.setPen(Qt.NoPen)
-                painter.drawEllipse(int(root_x + white_key_w/4), int(key_h - 18), int(white_key_w/2), 12)
+                painter.drawEllipse(int(root_x + white_key_w/2 - 6), int(key_h - 16), 12, 12)
 
         # Draw white keys
         x = 0
@@ -68,16 +72,33 @@ class PianoKeyboardWidget(QWidget):
                 painter.setPen(Qt.black)
                 painter.drawRect(int(x_white + white_key_w * 0.65), 0, int(black_key_w), int(black_key_h))
 
+        # Draw "C" key labels
+        painter.setPen(Qt.black)
+        font = painter.font()
+        font.setPointSize(8)
+        painter.setFont(font)
+        for midi_note, x in white_key_positions:
+            if (midi_note % 12) == 0:  # C key
+                label = self.midi_note_name(midi_note)
+                painter.drawText(int(x), int(key_h - 2), int(white_key_w), 12, Qt.AlignHCenter | Qt.AlignTop, label)
+
     def _key_x(self, midi_note, white_key_w):
         # Returns the x position of the left edge of the given midi_note key
         # Only for white keys and for overlays
-        start_note = 21
+        start_note = self.start_note
         x = 0
         for i in range(midi_note - start_note):
             if not self.is_black_key(start_note + i):
                 x += white_key_w
         return x
 
+    @staticmethod
+    def midi_note_name(n):
+        # Returns e.g. "C4"
+        note_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+        octave = (n // 12) - 1
+        name = note_names[n % 12]
+        return f"{name}{octave}"
 
     def mousePressEvent(self, event):
         # Map click to key based on fixed white key width and centering

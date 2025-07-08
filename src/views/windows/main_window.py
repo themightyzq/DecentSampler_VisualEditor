@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import QUndoStack
 from views.panels.sample_mapping_panel import SampleMappingPanel
 from views.panels.global_options_panel import GlobalOptionsPanel
 from panels.project_properties import ProjectPropertiesPanel
+from panels.group_properties import GroupPropertiesWidget
 from views.panels.preview_canvas import PreviewCanvas
 from panels.piano_keyboard import PianoKeyboardWidget
 from model import InstrumentPreset
@@ -88,12 +89,22 @@ class MainWindow(QMainWindow):
         def show_error(parent, title, msg):
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.critical(parent, title, msg)
+        from PyQt5.QtWidgets import QDockWidget
         try:
             self.global_options_panel = ProjectPropertiesPanel(self)
+            self.group_properties_panel_widget = GroupPropertiesWidget(self)
+            self.group_properties_panel = QDockWidget("ADSR Envelope", self)
+            self.group_properties_panel.setWidget(self.group_properties_panel_widget)
         except Exception as e:
             show_error(self, "Panel init failed", str(e))
             raise
         self.addDockWidget(Qt.RightDockWidgetArea, self.global_options_panel)
+        self.addDockWidget(Qt.RightDockWidgetArea, self.group_properties_panel)
+        # Connect ADSR controls to model and preview
+        self.group_properties_panel_widget.attack_spin.valueChanged.connect(self._adsr_update)
+        self.group_properties_panel_widget.decay_spin.valueChanged.connect(self._adsr_update)
+        self.group_properties_panel_widget.sustain_spin.valueChanged.connect(self._adsr_update)
+        self.group_properties_panel_widget.release_spin.valueChanged.connect(self._adsr_update)
 
     def _connectSignals(self):
         # Placeholder for future signal connections
@@ -103,6 +114,7 @@ class MainWindow(QMainWindow):
         self.preset = InstrumentPreset("Untitled")
         self.preset.ui_width = 812
         self.preset.ui_height = 375
+        # No test UI element; real controls will be added via the properties panel
         self.sample_mapping_panel.set_samples([])
         self.sample_mapping_panel.set_mapping(None)
         self.undo_stack.clear()
@@ -168,4 +180,20 @@ class MainWindow(QMainWindow):
         if hasattr(panel, "bg_color_btn"):
             panel.bg_color_btn.setText(getattr(self.preset, "bg_color", "") or "")
         panel.bg_image_edit.setText(self.preset.bg_image or "")
-        # If you have additional controls (attack, decay, etc.), set them here as well
+        # Set ADSR controls from model envelope
+        if hasattr(self, "group_properties_panel_widget") and hasattr(self.preset, "envelope"):
+            env = self.preset.envelope
+            self.group_properties_panel_widget.set_adsr(env.attack, env.decay, env.sustain, env.release)
+
+    def _adsr_update(self, val):
+        # Update model envelope and preview on ADSR change
+        if not self.preset or not hasattr(self, "group_properties_panel_widget"):
+            return
+        attack, decay, sustain, release = self.group_properties_panel_widget.get_adsr()
+        if hasattr(self.preset, "envelope"):
+            self.preset.envelope.attack = attack
+            self.preset.envelope.decay = decay
+            self.preset.envelope.sustain = sustain
+            self.preset.envelope.release = release
+        if hasattr(self, "preview_canvas"):
+            self.preview_canvas.set_preset(self.preset, os.getcwd())
