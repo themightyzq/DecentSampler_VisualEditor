@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel
 from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QPixmap
-from PyQt5.QtCore import Qt, QRect
+from PyQt5.QtCore import Qt, QRect, QSize
 
 from .ui_widgets import WIDGET_CLASS_MAP, FallbackWidget
 
@@ -10,8 +10,12 @@ class PreviewCanvas(QWidget):
         self.preset = None
         self.base_dir = ""
         self.bg_pixmap = None
-        self.setMinimumHeight(180)
+        self.setMinimumSize(812, 375)
+        self.setMaximumSize(812, 375)
         self.setToolTip("Preview of sample mappings and UI background")
+
+    def sizeHint(self):
+        return QSize(812, 375)
 
     def set_preset(self, preset, base_dir):
         self.preset = preset
