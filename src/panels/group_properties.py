@@ -8,7 +8,11 @@ class GroupPropertiesWidget(QWidget):
         from PyQt5.QtWidgets import QVBoxLayout, QFormLayout, QHBoxLayout, QSpacerItem, QSizePolicy
 
         main_layout = QVBoxLayout()
+        main_layout.setContentsMargins(8, 8, 8, 8)
+        main_layout.setSpacing(8)
         adsr_layout = QFormLayout()
+        adsr_layout.setContentsMargins(0, 0, 0, 0)
+        adsr_layout.setSpacing(8)
         self.attack_spin = QDoubleSpinBox()
         self.attack_spin.setRange(0.0, 10.0)
         self.attack_spin.setSingleStep(0.01)
@@ -45,8 +49,12 @@ class GroupPropertiesWidget(QWidget):
 
         # Velocity Map section
         vel_section = QVBoxLayout()
+        vel_section.setContentsMargins(0, 0, 0, 0)
+        vel_section.setSpacing(8)
         vel_section.addWidget(QLabel("Velocity Map"))
         vel_layout = QHBoxLayout()
+        vel_layout.setContentsMargins(0, 0, 0, 0)
+        vel_layout.setSpacing(8)
         self.lo_vel_label = QLabel("Low Velocity")
         self.lo_vel_label.setToolTip("Lowest velocity for this group")
         self.lo_vel_label.setAccessibleName("Low Velocity Label")
