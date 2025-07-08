@@ -63,7 +63,7 @@ class PreviewCanvas(QWidget):
         if self.preset and hasattr(self.preset, "envelope"):
             env = self.preset.envelope
             # Diagram area: bottom right, 120x60 px
-            margin = 10
+            margin = 8
             w, h = 120, 60
             x0 = self.width() - w - margin
             y0 = self.height() - h - margin
@@ -100,6 +100,6 @@ class PreviewCanvas(QWidget):
         if self.preset:
             painter.setPen(Qt.black)
             painter.setFont(self.font())
-            painter.drawText(10, 20, f"Preset: {self.preset.name}")
+            painter.drawText(8, 16, f"Preset: {self.preset.name}")
         # (Piano keyboard and mapping highlights removed; handled by PianoKeyboardWidget)
     # (is_black_key no longer needed)

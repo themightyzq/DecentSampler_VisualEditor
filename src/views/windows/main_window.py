@@ -62,6 +62,8 @@ class MainWindow(QMainWindow):
         # Center: PreviewCanvas (fixed) + PianoKeyboardWidget (fixed height, fixed width, centered)
         center_widget = QWidget()
         center_layout = QVBoxLayout()
+        center_layout.setContentsMargins(8, 8, 8, 8)
+        center_layout.setSpacing(8)
         self.preview_canvas = PreviewCanvas(self)
         self.preview_canvas.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.preview_canvas.setFixedSize(812, 375)
@@ -81,6 +83,8 @@ class MainWindow(QMainWindow):
 
         central = QWidget()
         layout = QVBoxLayout()
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
         layout.addWidget(splitter)
         central.setLayout(layout)
         self.setCentralWidget(central)

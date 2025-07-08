@@ -11,6 +11,8 @@ class ProjectPropertiesPanel(QDockWidget):
         super().__init__("Project Properties", parent)
         widget = QWidget()
         layout = QVBoxLayout()
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
 
         # Preset name
         self.preset_name_edit = QLineEdit()
@@ -26,6 +28,8 @@ class ProjectPropertiesPanel(QDockWidget):
         self.ui_height_spin.setToolTip("UI height in pixels (100–2000)")
 
         form_layout = QFormLayout()
+        form_layout.setContentsMargins(0, 0, 0, 0)
+        form_layout.setSpacing(8)
         form_layout.addRow(QLabel("Preset Name:"), self.preset_name_edit)
         form_layout.addRow(QLabel("UI Width:"), self.ui_width_spin)
         form_layout.addRow(QLabel("UI Height:"), self.ui_height_spin)
@@ -52,6 +56,8 @@ class ProjectPropertiesPanel(QDockWidget):
         # (imports moved to top)
         adsr_group = QGroupBox("ADSR Envelope")
         adsr_layout = QHBoxLayout()
+        adsr_layout.setContentsMargins(0, 0, 0, 0)
+        adsr_layout.setSpacing(8)
         self.attack_spin = QDoubleSpinBox()
         self.attack_spin.setRange(0.001, 10.0)
         self.attack_spin.setSingleStep(0.01)
@@ -127,6 +133,9 @@ class ProjectPropertiesPanel(QDockWidget):
         from PyQt5.QtWidgets import QComboBox, QGridLayout
         controls_group = QGroupBox("Controls")
         controls_layout = QGridLayout()
+        controls_layout.setContentsMargins(0, 0, 0, 0)
+        controls_layout.setHorizontalSpacing(8)
+        controls_layout.setVerticalSpacing(8)
         self.effect_names = ["Reverb", "Tone", "Chorus"]
         self.adsr_names = ["Attack", "Decay", "Sustain", "Release"]
         self.widget_types = ["Knob", "Slider"]
