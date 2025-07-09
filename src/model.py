@@ -1,5 +1,6 @@
 import xml.etree.ElementTree as ET
 from typing import List, Optional
+from utils.effects_catalog import EFFECTS_CATALOG
 
 class SampleMapping:
     def __init__(self, path: str, lo: int, hi: int, root: int):
@@ -53,7 +54,9 @@ class InstrumentPreset:
         cut_all_by_all: bool = False,
         silencing_mode: str = "normal",
         ui_elements: Optional[list] = None,
-        envelope: Optional[GroupEnvelope] = None
+        envelope: Optional[GroupEnvelope] = None,
+        effects: Optional[dict] = None,  # New: effect parameter values
+        advanced_mode: bool = False      # New: simple/advanced toggle
     ):
         self.name = name
         self.ui_width = ui_width
@@ -78,9 +81,12 @@ class InstrumentPreset:
         self.ui = type("UI", (), {})()
         self.ui.elements = ui_elements if ui_elements is not None else []
         self.envelope = envelope if envelope is not None else GroupEnvelope()
+        self.effects = effects if effects is not None else {}  # {effect_name: {param: value, ...}}
+        self.advanced_mode = advanced_mode
 
     @staticmethod
     def from_dspreset(path: str) -> "InstrumentPreset":
+        # (Legacy loading: not yet data-driven for all effects, but can be extended)
         tree = ET.parse(path)
         root = tree.getroot()
         name = root.attrib.get("presetName", "Untitled")
@@ -90,14 +96,12 @@ class InstrumentPreset:
         bg_image = ui_elem.attrib.get("bgImage") if ui_elem is not None else None
         layout_mode = ui_elem.attrib.get("layoutMode", "relative") if ui_elem is not None else "relative"
         bg_mode = ui_elem.attrib.get("bgMode", "top_left") if ui_elem is not None else "top_left"
-        # DSPreset UI flags
         have_reverb = ui_elem is not None and ui_elem.attrib.get("haveReverb", "false").lower() == "true"
         have_tone = ui_elem is not None and ui_elem.attrib.get("haveTone", "false").lower() == "true"
         have_chorus = ui_elem is not None and ui_elem.attrib.get("haveChorus", "false").lower() == "true"
         have_midicc1 = ui_elem is not None and ui_elem.attrib.get("haveMidicc1", "false").lower() == "true"
         no_attack = ui_elem is not None and ui_elem.attrib.get("noAttack", "false").lower() == "true"
         no_decay = ui_elem is not None and ui_elem.attrib.get("noDecay", "false").lower() == "true"
-        # Parse UI elements
         ui_elements = []
         if ui_elem is not None:
             for tab in ui_elem.findall("tab"):
@@ -128,16 +132,26 @@ class InstrumentPreset:
                     hi = int(sample.attrib.get("hiNote", 127))
                     root_note = int(sample.attrib.get("rootNote", 60))
                     mappings.append(SampleMapping(sample_path, lo, hi, root_note))
+        # Effects loading (basic, can be extended for full param support)
+        effects_elem = root.find(".//effects")
+        effects = {}
+        if effects_elem is not None:
+            for eff in effects_elem.findall("effect"):
+                eff_type = eff.attrib.get("type", "")
+                for name, meta in EFFECTS_CATALOG.items():
+                    if meta["type"] == eff_type:
+                        effects[name] = {}
+                        for param in eff.attrib:
+                            if param != "type":
+                                effects[name][param] = eff.attrib[param]
         return InstrumentPreset(
             name, ui_width, ui_height, bg_image, layout_mode, bg_mode, mappings,
             have_reverb=have_reverb, have_tone=have_tone, have_chorus=have_chorus, have_midicc1=have_midicc1,
-            no_attack=no_attack, no_decay=no_decay, ui_elements=ui_elements, envelope=envelope
+            no_attack=no_attack, no_decay=no_decay, ui_elements=ui_elements, envelope=envelope,
+            effects=effects
         )
 
     def auto_map(self, folder_path: str):
-        """
-        Auto-map all .wav files in the given folder to consecutive MIDI notes starting from self.start_note.
-        """
         import os
         wavs = sorted(
             [f for f in os.listdir(folder_path) if f.lower().endswith(".wav")]
@@ -156,7 +170,6 @@ class InstrumentPreset:
 
     def to_dspreset(self, path: str):
         root = ET.Element("DecentSampler", {"minVersion": "1.0.2", "presetName": self.name})
-        # If a custom control for an effect is present, set the corresponding haveX to "false"
         custom_labels = [el.label for el in getattr(self.ui, "elements", [])]
         ui_attribs = {
             "width": str(self.ui_width),
@@ -183,7 +196,6 @@ class InstrumentPreset:
                 "menu": "menu"
             }
             style = style_map.get((el.widget_type or "").lower(), "rotary")
-            # Set default sizes to match DecentSampler's example
             if style == "rotary":
                 width, height = 64, 64
             elif style == "linear_vertical":
@@ -194,8 +206,6 @@ class InstrumentPreset:
                 width, height = 150, 25
             else:
                 width, height = el.width, el.height
-
-            # Map effect label to DecentSampler parameter
             param_map = {
                 "Reverb": "FX_REVERB_WET_LEVEL",
                 "Tone": "FX_FILTER_FREQUENCY",
@@ -203,8 +213,6 @@ class InstrumentPreset:
                 "MIDI CC1": "VALUE"
             }
             param = param_map.get(el.label, el.label.upper())
-
-            # Add a <label> element for visible text
             label_attribs = {
                 "x": str(el.x),
                 "y": str(max(0, el.y - 20)),
@@ -216,7 +224,6 @@ class InstrumentPreset:
                 "hAlign": "center"
             }
             ET.SubElement(tab_elem, "label", label_attribs)
-
             attribs = {
                 "x": str(el.x),
                 "y": str(el.y),
@@ -242,7 +249,7 @@ class InstrumentPreset:
             }
             ET.SubElement(control_elem, "binding", binding_attribs)
 
-        # Add controls as labeled-knobs with bindings
+        # Add controls as labeled-knobs with bindings (legacy, for ADSR and legacy effects)
         knob_x = 200
         knob_y = 75
         knob_spacing = 70
@@ -275,9 +282,7 @@ class InstrumentPreset:
                 binding.set("translationTable", translation_table)
             knob_idx += 1
 
-        # Only add labeled-knob for envelope controls if not replaced by a custom control
         custom_labels_set = set(custom_labels)
-        # Only add labeled-knob for ADSR if not replaced by a custom control
         if self.have_attack and "Attack" not in custom_labels_set:
             add_knob("Attack", 0.0, 10.0, getattr(self.envelope, "attack", 0.01), "ENV_ATTACK", "amp", "instrument", "ENV_ATTACK")
         if self.have_decay and "Decay" not in custom_labels_set:
@@ -286,16 +291,23 @@ class InstrumentPreset:
             add_knob("Sustain", 0.0, 1.0, getattr(self.envelope, "sustain", 1.0), "ENV_SUSTAIN", "amp", "instrument", "ENV_SUSTAIN")
         if self.have_release and "Release" not in custom_labels_set:
             add_knob("Release", 0.0, 25.0, getattr(self.envelope, "release", 0.43), "ENV_RELEASE", "amp", "instrument", "ENV_RELEASE")
-        # Only add labeled-knob for Chorus, Tone, Reverb if not replaced by a custom control
-        if self.have_chorus and "Chorus" not in custom_labels_set:
-            fx_position += 1
-            add_knob("Chorus", 0.0, 1.0, 0.0, "FX_MIX", "effect", "instrument", "FX_MIX")
-        if self.have_tone and "Tone" not in custom_labels_set:
-            fx_position += 1
-            add_knob("Tone", 0, 1, 1, "FX_FILTER_FREQUENCY", "effect", "instrument", "FX_FILTER_FREQUENCY", translation="table", translation_table="0,33;0.3,150;0.4,450;0.5,1100;0.7,4100;0.9,11000;1.0001,22000")
-        if self.have_reverb and "Reverb" not in custom_labels_set:
-            fx_position += 1
-            add_knob("Reverb", 0, 100, 50, "FX_REVERB_WET_LEVEL", "effect", "instrument", "FX_REVERB_WET_LEVEL", translation="linear")
+
+        # Data-driven effects section
+        effects_elem = ET.SubElement(root, "effects")
+        for effect_name, params in self.effects.items():
+            if effect_name in EFFECTS_CATALOG:
+                eff_meta = EFFECTS_CATALOG[effect_name]
+                eff_type = eff_meta["type"]
+                eff_params = {"type": eff_type}
+                # Use advanced or simple param set
+                param_defs = eff_meta["advanced"] if self.advanced_mode else eff_meta["simple"]
+                for param_def in param_defs:
+                    pname = param_def["name"]
+                    if pname in params:
+                        eff_params[pname] = str(params[pname])
+                    else:
+                        eff_params[pname] = str(param_def.get("default", ""))
+                ET.SubElement(effects_elem, "effect", eff_params)
 
         # Groups and sample mapping
         groups_elem = ET.SubElement(root, "groups", {
@@ -306,7 +318,6 @@ class InstrumentPreset:
             "volume": "-3dB"
         })
         group_elem = ET.SubElement(groups_elem, "group")
-        # Write envelope
         if hasattr(self, "envelope"):
             ET.SubElement(group_elem, "envelope", {
                 "attack": str(getattr(self.envelope, "attack", 0.01)),
@@ -326,27 +337,7 @@ class InstrumentPreset:
                 "rootNote": str(mapping.root)
             })
 
-        # Effects section
-        effects_elem = ET.SubElement(root, "effects")
-        if self.have_chorus:
-            ET.SubElement(effects_elem, "effect", {
-                "type": "chorus",
-                "mix": "0.0",
-                "modDepth": "0.2",
-                "modRate": "0.2"
-            })
-        if self.have_tone:
-            ET.SubElement(effects_elem, "effect", {
-                "type": "lowpass",
-                "frequency": "22000.0"
-            })
-        if self.have_reverb:
-            ET.SubElement(effects_elem, "effect", {
-                "type": "reverb",
-                "wetLevel": "0.5"
-            })
-
-        # MIDI CC mapping for tone knob
+        # MIDI CC mapping for tone knob (legacy)
         if self.have_midicc1 and self.have_tone:
             midi_elem = ET.SubElement(root, "midi")
             cc_elem = ET.SubElement(midi_elem, "cc", {"number": "1"})
