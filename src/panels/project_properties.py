@@ -6,6 +6,116 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QIcon, QPainter, QColor
 
+from utils.effects_catalog import EFFECTS_CATALOG
+
+from PyQt5.QtWidgets import QDialog, QDialogButtonBox
+
+class AddControlDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Add DSP Control")
+        self.setModal(True)
+        self.setMinimumWidth(400)
+
+        # Only allow these effect types
+        self.effect_names = [
+            "Reverb", "Delay", "Chorus", "Phaser", "Convolution",
+            "Lowpass", "Highpass", "Bandpass", "Notch", "Peak", "Gain", "Wave Folder"
+        ]
+        self.widget_types = ["Knob", "Slider"]
+
+        self.layout = QVBoxLayout()
+        self.form_layout = QFormLayout()
+
+        # Label
+        self.label_edit = QLineEdit()
+        self.form_layout.addRow("Label:", self.label_edit)
+
+        # Effect type dropdown
+        self.effect_combo = QComboBox()
+        self.effect_combo.addItems(self.effect_names)
+        self.effect_combo.currentIndexChanged.connect(self._update_param_dropdown)
+        self.form_layout.addRow("Effect Type:", self.effect_combo)
+
+        # Parameter dropdown (updates based on effect)
+        self.param_combo = QComboBox()
+        self.form_layout.addRow("Parameter:", self.param_combo)
+
+        # Control type dropdown
+        self.widget_combo = QComboBox()
+        self.widget_combo.addItems(self.widget_types)
+        self.form_layout.addRow("Control Type:", self.widget_combo)
+
+        # X/Y position
+        self.x_spin = QSpinBox()
+        self.x_spin.setRange(0, 2000)
+        self.x_spin.setValue(100)
+        self.form_layout.addRow("X Position:", self.x_spin)
+        self.y_spin = QSpinBox()
+        self.y_spin.setRange(0, 2000)
+        self.y_spin.setValue(100)
+        self.form_layout.addRow("Y Position:", self.y_spin)
+
+        # Min/Max/Default value
+        self.min_spin = QDoubleSpinBox()
+        self.min_spin.setRange(-99999, 99999)
+        self.min_spin.setValue(0.0)
+        self.min_spin.setSingleStep(0.01)
+        self.min_spin.valueChanged.connect(self._update_default_value)
+        self.form_layout.addRow("Min Value:", self.min_spin)
+
+        self.max_spin = QDoubleSpinBox()
+        self.max_spin.setRange(-99999, 99999)
+        self.max_spin.setValue(1.0)
+        self.max_spin.setSingleStep(0.01)
+        self.max_spin.valueChanged.connect(self._update_default_value)
+        self.form_layout.addRow("Max Value:", self.max_spin)
+
+        self.default_spin = QDoubleSpinBox()
+        self.default_spin.setRange(-99999, 99999)
+        self.default_spin.setValue(0.5)
+        self.default_spin.setSingleStep(0.01)
+        self.form_layout.addRow("Default Value:", self.default_spin)
+
+        self.layout.addLayout(self.form_layout)
+
+        # Dialog buttons
+        buttons = QDialogButtonBox()
+        self.create_btn = buttons.addButton("Create", QDialogButtonBox.AcceptRole)
+        self.cancel_btn = buttons.addButton("Cancel", QDialogButtonBox.RejectRole)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        self.layout.addWidget(buttons)
+        self.setLayout(self.layout)
+
+        self._update_param_dropdown()
+        self._update_default_value()
+
+    def _update_param_dropdown(self):
+        self.param_combo.clear()
+        effect = self.effect_combo.currentText()
+        if not effect:
+            return
+        # Use "simple" params by default
+        param_defs = EFFECTS_CATALOG.get(effect, {}).get("simple", [])
+        param_names = [param["name"] for param in param_defs]
+        self.param_combo.addItems(param_names)
+        # Optionally update min/max/default based on first param
+        if param_defs:
+            p = param_defs[0]
+            self.min_spin.setValue(p.get("min", 0.0))
+            self.max_spin.setValue(p.get("max", 1.0))
+            midpoint = (self.min_spin.value() + self.max_spin.value()) / 2.0
+            self.default_spin.setValue(p.get("default", midpoint))
+        self._update_default_value()
+
+    def _update_default_value(self):
+        min_val = self.min_spin.value()
+        max_val = self.max_spin.value()
+        midpoint = (min_val + max_val) / 2.0
+        if self.default_spin.value() < min_val or self.default_spin.value() > max_val:
+            self.default_spin.setValue(midpoint)
+
 class ProjectPropertiesPanel(QDockWidget):
     def __init__(self, parent=None):
         super().__init__("Project Properties", parent)
@@ -51,9 +161,7 @@ class ProjectPropertiesPanel(QDockWidget):
         form_layout.addRow(QLabel("BG Image:"), self.bg_image_edit)
         form_layout.addRow("", self.bg_image_btn)
 
-        # (Effect toggle buttons removed; all controls now in the unified controls panel below)
         # ADSR controls
-        # (imports moved to top)
         adsr_group = QGroupBox("ADSR Envelope")
         adsr_layout = QHBoxLayout()
         adsr_layout.setContentsMargins(0, 0, 0, 0)
@@ -129,64 +237,47 @@ class ProjectPropertiesPanel(QDockWidget):
         self.env_plot = MiniEnvelopePlot()
         form_layout.addRow(self.env_plot)
 
+        # Simple/Advanced toggle
+        self.advanced_mode_checkbox = QCheckBox("Advanced Mode")
+        self.advanced_mode_checkbox.setChecked(False)
+        self.advanced_mode_checkbox.setToolTip("Show all effect parameters (advanced users)")
+        self.advanced_mode_checkbox.stateChanged.connect(self._on_advanced_mode_toggled)
+        form_layout.addRow(self.advanced_mode_checkbox)
+
+        # Advanced Mode control list (hidden by default)
+        self.advanced_controls_container = QWidget()
+        self.advanced_controls_layout = QVBoxLayout()
+        self.advanced_controls_layout.setContentsMargins(0, 0, 0, 0)
+        self.advanced_controls_layout.setSpacing(4)
+        self.advanced_controls_container.setLayout(self.advanced_controls_layout)
+        self.advanced_controls_container.setVisible(False)
+        form_layout.addRow(self.advanced_controls_container)
+
         # Controls sub-panel: widget type selectors for each effect
-        from PyQt5.QtWidgets import QComboBox, QGridLayout
-        controls_group = QGroupBox("Controls")
-        controls_layout = QGridLayout()
-        controls_layout.setContentsMargins(0, 0, 0, 0)
-        controls_layout.setHorizontalSpacing(8)
-        controls_layout.setVerticalSpacing(8)
-        self.effect_names = ["Reverb", "Tone", "Chorus"]
+        controls_group = QGroupBox("Effects Controls")
+        self.controls_layout = QGridLayout()
+        self.controls_layout.setContentsMargins(0, 0, 0, 0)
+        self.controls_layout.setHorizontalSpacing(8)
+        self.controls_layout.setVerticalSpacing(8)
+        controls_group.setLayout(self.controls_layout)
+        form_layout.addRow(controls_group)
+
+        layout.addLayout(form_layout)
+        widget.setLayout(layout)
+        self.setWidget(widget)
+
+        # State for effect controls
+        self.effect_names = list(EFFECTS_CATALOG.keys())
         self.adsr_names = ["Attack", "Decay", "Sustain", "Release"]
         self.widget_types = ["Knob", "Slider"]
         self.widget_type_combos = {}
         self.x_spinboxes = {}
         self.y_spinboxes = {}
         self.enable_checkboxes = {}
+        self.checked_state = {}  # Store checked state for all controls
 
-        all_names = self.adsr_names + self.effect_names
-        for i, name in enumerate(all_names):
-            from PyQt5.QtWidgets import QCheckBox
-            row = i
-            enable = QCheckBox()
-            enable.setChecked(False)
-            enable.setToolTip(f"Enable {name} control")
-            controls_layout.addWidget(enable, row, 0)
-            self.enable_checkboxes[name] = enable
-            enable.stateChanged.connect(lambda state, eff=name: self._enable_update(eff, state))
-
-            label = QLabel(name)
-            controls_layout.addWidget(label, row, 1)
-            combo = QComboBox()
-            combo.addItems(self.widget_types)
-            combo.setToolTip(f"Select widget type for {name} control")
-            controls_layout.addWidget(combo, row, 2)
-            self.widget_type_combos[name] = combo
-            combo.currentIndexChanged.connect(self._widget_type_update)
-            # X/Y position spinboxes
-            x_spin = QSpinBox()
-            x_spin.setRange(0, 2000)
-            x_spin.setValue(100 + 80 * i)
-            x_spin.setToolTip(f"X position for {name}")
-            controls_layout.addWidget(QLabel("X:"), row, 3)
-            controls_layout.addWidget(x_spin, row, 4)
-            self.x_spinboxes[name] = x_spin
-            x_spin.valueChanged.connect(lambda val, eff=name: self._xy_update(eff, "x", val))
-            y_spin = QSpinBox()
-            y_spin.setRange(0, 2000)
-            y_spin.setValue(100)
-            y_spin.setToolTip(f"Y position for {name}")
-            controls_layout.addWidget(QLabel("Y:"), row, 5)
-            controls_layout.addWidget(y_spin, row, 6)
-            self.y_spinboxes[name] = y_spin
-            y_spin.valueChanged.connect(lambda val, eff=name: self._xy_update(eff, "y", val))
-        controls_group.setLayout(controls_layout)
-        form_layout.addRow(controls_group)
-
-        layout.addLayout(form_layout)
-
-        widget.setLayout(layout)
-        self.setWidget(widget)
+        # Build effect controls
+        self._rebuild_effect_controls()
 
         # Connect live update signals for all properties
         self.preset_name_edit.textChanged.connect(self._live_update)
@@ -198,11 +289,197 @@ class ProjectPropertiesPanel(QDockWidget):
         self.sustain_spin.valueChanged.connect(self._adsr_update)
         self.release_spin.valueChanged.connect(self._adsr_update)
 
+    def _rebuild_effect_controls(self):
+        # Remove all widgets from the layout
+        while self.controls_layout.count():
+            item = self.controls_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+        # Add only the "Add Control" button, centered/aligned
+        self.add_control_btn = QPushButton("Add Control")
+        self.add_control_btn.setMinimumHeight(40)
+        self.add_control_btn.setStyleSheet("font-size: 16px;")
+        self.add_control_btn.clicked.connect(self._open_add_control_modal)
+        self.controls_layout.addWidget(self.add_control_btn, 0, 0, 1, -1, alignment=Qt.AlignCenter)
+        # Update advanced controls list if visible
+        self._refresh_advanced_controls_list()
+
+    def _open_add_control_modal(self):
+        dialog = AddControlDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            label = dialog.label_edit.text()
+            effect = dialog.effect_combo.currentText()
+            param = dialog.param_combo.currentText()
+            widget_type = dialog.widget_combo.currentText()
+            x = dialog.x_spin.value()
+            y = dialog.y_spin.value()
+            min_val = dialog.min_spin.value()
+            max_val = dialog.max_spin.value()
+            default_val = dialog.default_spin.value()
+            self._add_new_control(
+                label=label,
+                effect=effect,
+                param=param,
+                widget_type=widget_type,
+                x=x,
+                y=y,
+                min_val=min_val,
+                max_val=max_val,
+                default_val=default_val
+            )
+
+    def _add_new_control(self, label, effect, param, widget_type, x, y, min_val, max_val, default_val, edit_index=None):
+        # Add or update the control in the model and UI
+        from model import UIElement
+        mw = self.parent()
+        if hasattr(mw, "preset") and hasattr(mw.preset, "ui") and hasattr(mw.preset.ui, "elements"):
+            if edit_index is not None:
+                # Edit existing control
+                el = mw.preset.ui.elements[edit_index]
+                el.x = x
+                el.y = y
+                el.label = label
+                el.tag = widget_type
+                el.widget_type = widget_type
+                el.effect_type = effect
+                el.parameter = param
+                el.min = min_val
+                el.max = max_val
+                el.default = default_val
+            else:
+                # Add new control
+                el = UIElement(
+                    x=x,
+                    y=y,
+                    width=64,
+                    height=64,
+                    label=label,
+                    skin=None,
+                    tag=widget_type,
+                    widget_type=widget_type
+                )
+                el.effect_type = effect
+                el.parameter = param
+                el.min = min_val
+                el.max = max_val
+                el.default = default_val
+                mw.preset.ui.elements.append(el)
+            if hasattr(mw, "preview_canvas"):
+                mw.preview_canvas.set_preset(mw.preset, "")
+            self._refresh_advanced_controls_list()
+        # Optionally, refresh the controls panel or UI as needed
+        # self._rebuild_effect_controls()
+
+    def _on_advanced_mode_toggled(self, state):
+        checked = state == Qt.Checked
+        self.advanced_controls_container.setVisible(checked)
+        if checked:
+            self._refresh_advanced_controls_list()
+        else:
+            self._clear_advanced_controls_list()
+
+    def _clear_advanced_controls_list(self):
+        while self.advanced_controls_layout.count():
+            item = self.advanced_controls_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    def _refresh_advanced_controls_list(self):
+        self._clear_advanced_controls_list()
+        mw = self.parent()
+        if not (hasattr(mw, "preset") and hasattr(mw.preset, "ui") and hasattr(mw.preset.ui, "elements")):
+            return
+        for idx, el in enumerate(mw.preset.ui.elements):
+            row = QWidget()
+            row_layout = QHBoxLayout()
+            row_layout.setContentsMargins(0, 0, 0, 0)
+            row_layout.setSpacing(6)
+            # Label
+            row_layout.addWidget(QLabel(str(getattr(el, "label", ""))))
+            # Effect Type
+            row_layout.addWidget(QLabel(str(getattr(el, "effect_type", ""))))
+            # Parameter
+            row_layout.addWidget(QLabel(str(getattr(el, "parameter", ""))))
+            # Control Type
+            row_layout.addWidget(QLabel(str(getattr(el, "widget_type", ""))))
+            # X/Y
+            row_layout.addWidget(QLabel(f"({getattr(el, 'x', 0)}, {getattr(el, 'y', 0)})"))
+            # Edit icon
+            edit_btn = QPushButton("✎")
+            edit_btn.setFixedWidth(28)
+            edit_btn.setToolTip("Edit")
+            edit_btn.clicked.connect(lambda _, i=idx: self._edit_control(i))
+            row_layout.addWidget(edit_btn)
+            # Delete icon
+            del_btn = QPushButton("🗑")
+            del_btn.setFixedWidth(28)
+            del_btn.setToolTip("Delete")
+            del_btn.clicked.connect(lambda _, i=idx: self._delete_control(i))
+            row_layout.addWidget(del_btn)
+            row.setLayout(row_layout)
+            self.advanced_controls_layout.addWidget(row)
+
+    def _edit_control(self, idx):
+        mw = self.parent()
+        if not (hasattr(mw, "preset") and hasattr(mw.preset, "ui") and hasattr(mw.preset.ui, "elements")):
+            return
+        el = mw.preset.ui.elements[idx]
+        dialog = AddControlDialog(self)
+        # Pre-fill dialog with current values
+        dialog.label_edit.setText(str(getattr(el, "label", "")))
+        effect_type = getattr(el, "effect_type", "Reverb")
+        if effect_type in dialog.effect_names:
+            dialog.effect_combo.setCurrentText(effect_type)
+        dialog._update_param_dropdown()
+        param = getattr(el, "parameter", "")
+        if param in [dialog.param_combo.itemText(i) for i in range(dialog.param_combo.count())]:
+            dialog.param_combo.setCurrentText(param)
+        dialog.widget_combo.setCurrentText(str(getattr(el, "widget_type", "Knob")))
+        dialog.x_spin.setValue(getattr(el, "x", 0))
+        dialog.y_spin.setValue(getattr(el, "y", 0))
+        dialog.min_spin.setValue(getattr(el, "min", 0.0))
+        dialog.max_spin.setValue(getattr(el, "max", 1.0))
+        dialog.default_spin.setValue(getattr(el, "default", 0.5))
+        if dialog.exec_() == QDialog.Accepted:
+            label = dialog.label_edit.text()
+            effect = dialog.effect_combo.currentText()
+            param = dialog.param_combo.currentText()
+            widget_type = dialog.widget_combo.currentText()
+            x = dialog.x_spin.value()
+            y = dialog.y_spin.value()
+            min_val = dialog.min_spin.value()
+            max_val = dialog.max_spin.value()
+            default_val = dialog.default_spin.value()
+            self._add_new_control(
+                label=label,
+                effect=effect,
+                param=param,
+                widget_type=widget_type,
+                x=x,
+                y=y,
+                min_val=min_val,
+                max_val=max_val,
+                default_val=default_val,
+                edit_index=idx
+            )
+
+    def _delete_control(self, idx):
+        mw = self.parent()
+        if not (hasattr(mw, "preset") and hasattr(mw.preset, "ui") and hasattr(mw.preset.ui, "elements")):
+            return
+        del mw.preset.ui.elements[idx]
+        if hasattr(mw, "preview_canvas"):
+            mw.preview_canvas.set_preset(mw.preset, "")
+        self._refresh_advanced_controls_list()
+
     def set_flags_from_preset(self, preset):
         # Set effect checkboxes from preset
-        for name in ["Reverb", "Tone", "Chorus"]:
+        for name in self.adsr_names + self.effect_names:
             if name in self.enable_checkboxes:
-                self.enable_checkboxes[name].setChecked(getattr(preset, f"have_{name.lower()}", False))
+                checked = getattr(preset, f"have_{name.lower()}", False) if name in ["Reverb", "Tone", "Chorus"] else True
+                self.enable_checkboxes[name].setChecked(checked)
         # Set ADSR values
         env = getattr(preset, "envelope", None)
         if env:
@@ -221,11 +498,7 @@ class ProjectPropertiesPanel(QDockWidget):
                     setattr(mw.preset, f"have_{name.lower()}", self.enable_checkboxes[name].isChecked())
             # Add/remove UIElements for each effect
             from model import UIElement
-            effect_map = {
-                "Reverb": self.enable_checkboxes["Reverb"].isChecked(),
-                "Tone": self.enable_checkboxes["Tone"].isChecked(),
-                "Chorus": self.enable_checkboxes["Chorus"].isChecked(),
-            }
+            effect_map = {name: self.enable_checkboxes[name].isChecked() for name in self.adsr_names + self.effect_names}
             # Remove elements for effects that are now off
             mw.preset.ui.elements = [
                 el for el in mw.preset.ui.elements
@@ -237,8 +510,8 @@ class ProjectPropertiesPanel(QDockWidget):
                     widget_type = self.widget_type_combos[effect].currentText()
                     mw.preset.ui.elements.append(
                         UIElement(
-                            x=100 + 80 * list(effect_map.keys()).index(effect),
-                            y=100,
+                            x=self.x_spinboxes[effect].value(),
+                            y=self.y_spinboxes[effect].value(),
                             width=64,
                             height=64,
                             label=effect,
@@ -250,7 +523,9 @@ class ProjectPropertiesPanel(QDockWidget):
         if hasattr(mw, "preview_canvas") and hasattr(mw, "preset"):
             mw.preview_canvas.set_preset(mw.preset, "")
 
-    def _enable_update(self, effect, state):
+    def _on_enable_checkbox(self, effect, state):
+        # Unified handler for all enable checkboxes (ADSR and effects)
+        self.checked_state[effect] = (state == 2)
         mw = self.parent()
         if hasattr(mw, "preset") and hasattr(mw.preset, "ui") and hasattr(mw.preset.ui, "elements"):
             enabled = state == 2
@@ -275,6 +550,8 @@ class ProjectPropertiesPanel(QDockWidget):
                 )
             if hasattr(mw, "preview_canvas"):
                 mw.preview_canvas.set_preset(mw.preset, "")
+        # After updating model/preview, rebuild controls to show/hide parameter controls
+        self._rebuild_effect_controls()
 
     def _widget_type_update(self):
         # Update preset.ui.elements with selected widget types
