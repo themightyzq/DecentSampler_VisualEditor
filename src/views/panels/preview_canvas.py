@@ -63,42 +63,7 @@ class PreviewCanvas(QWidget):
                 pixmap = widget_cls.render_to_pixmap(rect.width(), rect.height(), label, skin)
                 painter.drawPixmap(rect, pixmap)
 
-        # Draw ADSR envelope diagram in corner
-        if self.preset and hasattr(self.preset, "envelope"):
-            env = self.preset.envelope
-            # Diagram area: bottom right, 120x60 px
-            margin = 8
-            w, h = 120, 60
-            x0 = self.width() - w - margin
-            y0 = self.height() - h - margin
-            painter.setPen(Qt.black)
-            painter.setBrush(QColor(245, 245, 245, 220))
-            painter.drawRect(x0, y0, w, h)
-            # Draw envelope curve
-            atk = max(env.attack, 0.01)
-            dec = max(env.decay, 0.01)
-            sus = max(env.sustain, 0.01)
-            rel = max(env.release, 0.01)
-            total = atk + dec + rel + 0.01
-            x_atk = x0 + int(w * atk / total * 0.4)
-            x_dec = x_atk + int(w * dec / total * 0.3)
-            x_rel = x0 + w - int(w * rel / total * 0.3)
-            y_top = y0 + 10
-            y_sus = y0 + int(h * (1 - sus) * 0.7)
-            y_base = y0 + h - 10
-            points = [
-                (x0 + 10, y_base),  # start
-                (x_atk, y_top),     # attack peak
-                (x_dec, y_sus),     # decay to sustain
-                (x_rel, y_sus),     # sustain
-                (x0 + w - 10, y_base)  # release
-            ]
-            painter.setPen(QColor(100, 100, 255))
-            for i in range(len(points) - 1):
-                painter.drawLine(int(points[i][0]), int(points[i][1]), int(points[i+1][0]), int(points[i+1][1]))
-            painter.setPen(Qt.black)
-            painter.setFont(self.font())
-            painter.drawText(x0 + 5, y0 + 15, "ADSR")
+        # (ADSR envelope preview removed from preview canvas; now shown in properties panel)
 
         # Draw preset name
         if self.preset:

@@ -330,13 +330,13 @@ class InstrumentPreset:
             knob_idx += 1
 
         custom_labels_set = set(custom_labels)
-        if self.have_attack and "Attack" not in custom_labels_set:
+        if getattr(self, "have_attack", False) and "Attack" not in custom_labels_set:
             add_knob("Attack", 0.0, 10.0, getattr(self.envelope, "attack", 0.01), "ENV_ATTACK", "amp", "instrument", "ENV_ATTACK")
-        if self.have_decay and "Decay" not in custom_labels_set:
+        if getattr(self, "have_decay", False) and "Decay" not in custom_labels_set:
             add_knob("Decay", 0.0, 25.0, getattr(self.envelope, "decay", 1.0), "ENV_DECAY", "amp", "instrument", "ENV_DECAY")
-        if self.have_sustain and "Sustain" not in custom_labels_set:
+        if getattr(self, "have_sustain", False) and "Sustain" not in custom_labels_set:
             add_knob("Sustain", 0.0, 1.0, getattr(self.envelope, "sustain", 1.0), "ENV_SUSTAIN", "amp", "instrument", "ENV_SUSTAIN")
-        if self.have_release and "Release" not in custom_labels_set:
+        if getattr(self, "have_release", False) and "Release" not in custom_labels_set:
             add_knob("Release", 0.0, 25.0, getattr(self.envelope, "release", 0.43), "ENV_RELEASE", "amp", "instrument", "ENV_RELEASE")
 
         # Data-driven effects section
