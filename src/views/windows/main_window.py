@@ -6,7 +6,6 @@ from PyQt5.QtWidgets import QUndoStack
 from views.panels.sample_mapping_panel import SampleMappingPanel
 from views.panels.global_options_panel import GlobalOptionsPanel
 from panels.project_properties import ProjectPropertiesPanel
-from panels.group_properties import GroupPropertiesWidget
 from views.panels.preview_canvas import PreviewCanvas
 from panels.piano_keyboard import PianoKeyboardWidget
 from model import InstrumentPreset
@@ -96,19 +95,10 @@ class MainWindow(QMainWindow):
         from PyQt5.QtWidgets import QDockWidget
         try:
             self.global_options_panel = ProjectPropertiesPanel(self)
-            self.group_properties_panel_widget = GroupPropertiesWidget(self)
-            self.group_properties_panel = QDockWidget("ADSR Envelope", self)
-            self.group_properties_panel.setWidget(self.group_properties_panel_widget)
         except Exception as e:
             show_error(self, "Panel init failed", str(e))
             raise
         self.addDockWidget(Qt.RightDockWidgetArea, self.global_options_panel)
-        self.addDockWidget(Qt.RightDockWidgetArea, self.group_properties_panel)
-        # Connect ADSR controls to model and preview
-        self.group_properties_panel_widget.attack_spin.valueChanged.connect(self._adsr_update)
-        self.group_properties_panel_widget.decay_spin.valueChanged.connect(self._adsr_update)
-        self.group_properties_panel_widget.sustain_spin.valueChanged.connect(self._adsr_update)
-        self.group_properties_panel_widget.release_spin.valueChanged.connect(self._adsr_update)
 
     def _connectSignals(self):
         # Placeholder for future signal connections
