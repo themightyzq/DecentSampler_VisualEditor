@@ -11,11 +11,15 @@ from utils.effects_catalog import EFFECTS_CATALOG
 from PyQt5.QtWidgets import QDialog, QDialogButtonBox
 
 class AddControlDialog(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, existing_controls=None, edit_index=None):
         super().__init__(parent)
         self.setWindowTitle("Add DSP Control")
         self.setModal(True)
         self.setMinimumWidth(400)
+        self.existing_controls = existing_controls or []
+        self.edit_index = edit_index
+        self.error_label = QLabel("")
+        self.error_label.setStyleSheet("color: red;")
 
         # Only allow these effect types
         self.effect_names = [
@@ -78,18 +82,71 @@ class AddControlDialog(QDialog):
         self.form_layout.addRow("Default Value:", self.default_spin)
 
         self.layout.addLayout(self.form_layout)
+        self.layout.addWidget(self.error_label)
 
         # Dialog buttons
         buttons = QDialogButtonBox()
         self.create_btn = buttons.addButton("Create", QDialogButtonBox.AcceptRole)
         self.cancel_btn = buttons.addButton("Cancel", QDialogButtonBox.RejectRole)
-        buttons.accepted.connect(self.accept)
+        buttons.accepted.connect(self._validate_and_accept)
         buttons.rejected.connect(self.reject)
         self.layout.addWidget(buttons)
         self.setLayout(self.layout)
 
         self._update_param_dropdown()
         self._update_default_value()
+
+    def _validate_and_accept(self):
+        # Reset error state
+        self.error_label.setText("")
+        for widget in [self.label_edit, self.min_spin, self.max_spin, self.default_spin]:
+            widget.setStyleSheet("")
+        valid = True
+        errors = []
+
+        label = self.label_edit.text().strip()
+        effect = self.effect_combo.currentText()
+        param = self.param_combo.currentText()
+        min_val = self.min_spin.value()
+        max_val = self.max_spin.value()
+        default_val = self.default_spin.value()
+
+        # Check for duplicate Label+Effect+Parameter
+        for idx, ctrl in enumerate(self.existing_controls):
+            if self.edit_index is not None and idx == self.edit_index:
+                continue
+            if (
+                getattr(ctrl, "label", "") == label and
+                getattr(ctrl, "effect_type", "") == effect and
+                getattr(ctrl, "parameter", "") == param
+            ):
+                valid = False
+                errors.append("Duplicate Label + Effect Type + Parameter.")
+                self.label_edit.setStyleSheet("background-color: #ffcccc;")
+                break
+
+        # Min < Max
+        if min_val >= max_val:
+            valid = False
+            errors.append("Min must be less than Max.")
+            self.min_spin.setStyleSheet("background-color: #ffcccc;")
+            self.max_spin.setStyleSheet("background-color: #ffcccc;")
+
+        # Default in range
+        if not (min_val <= default_val <= max_val):
+            valid = False
+            errors.append("Default Value must be within Min–Max range.")
+            self.default_spin.setStyleSheet("background-color: #ffcccc;")
+
+        if not label:
+            valid = False
+            errors.append("Label is required.")
+            self.label_edit.setStyleSheet("background-color: #ffcccc;")
+
+        if not valid:
+            self.error_label.setText("\n".join(errors))
+            return
+        self.accept()
 
     def _update_param_dropdown(self):
         self.param_combo.clear()
@@ -306,7 +363,11 @@ class ProjectPropertiesPanel(QDockWidget):
         self._refresh_advanced_controls_list()
 
     def _open_add_control_modal(self):
-        dialog = AddControlDialog(self)
+        mw = self.parent()
+        existing_controls = []
+        if hasattr(mw, "preset") and hasattr(mw.preset, "ui") and hasattr(mw.preset.ui, "elements"):
+            existing_controls = mw.preset.ui.elements
+        dialog = AddControlDialog(self, existing_controls=existing_controls)
         if dialog.exec_() == QDialog.Accepted:
             label = dialog.label_edit.text()
             effect = dialog.effect_combo.currentText()
@@ -426,7 +487,11 @@ class ProjectPropertiesPanel(QDockWidget):
         if not (hasattr(mw, "preset") and hasattr(mw.preset, "ui") and hasattr(mw.preset.ui, "elements")):
             return
         el = mw.preset.ui.elements[idx]
-        dialog = AddControlDialog(self)
+        dialog = AddControlDialog(
+            self,
+            existing_controls=mw.preset.ui.elements,
+            edit_index=idx
+        )
         # Pre-fill dialog with current values
         dialog.label_edit.setText(str(getattr(el, "label", "")))
         effect_type = getattr(el, "effect_type", "Reverb")

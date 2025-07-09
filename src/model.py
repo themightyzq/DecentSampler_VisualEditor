@@ -188,7 +188,54 @@ class InstrumentPreset:
         ui_elem = ET.SubElement(root, "ui", ui_attribs)
         tab_elem = ET.SubElement(ui_elem, "tab", {"name": "main"})
         # Write UI elements
+        used_labels = {}
         for el in getattr(self.ui, "elements", []):
+            # Ensure unique label
+            base_label = str(getattr(el, "label", "Control"))
+            label = base_label
+            count = used_labels.get(base_label, 0)
+            if count > 0:
+                label = f"{base_label}_{count+1}"
+            used_labels[base_label] = count + 1
+
+            # Validate min/max/default
+            min_val = float(getattr(el, "min", 0.0))
+            max_val = float(getattr(el, "max", 1.0))
+            default_val = float(getattr(el, "default", (min_val + max_val) / 2.0))
+            if min_val > max_val:
+                min_val, max_val = max_val, min_val
+            if not (min_val <= default_val <= max_val):
+                default_val = (min_val + max_val) / 2.0
+
+            # UIControl type
+            control_type = str(getattr(el, "widget_type", "Knob")).lower()
+            if control_type not in ("knob", "slider"):
+                control_type = "knob"
+
+            # <uiControl> element
+            ui_control_attribs = {
+                "name": label,
+                "type": control_type,
+                "x": str(getattr(el, "x", 0)),
+                "y": str(getattr(el, "y", 0)),
+                "min": str(min_val),
+                "max": str(max_val),
+                "default": str(default_val)
+            }
+            ET.SubElement(tab_elem, "uiControl", ui_control_attribs)
+
+            # <modulator> or parameter mapping
+            effect_type = getattr(el, "effect_type", None)
+            parameter = getattr(el, "parameter", None)
+            if effect_type and parameter:
+                # Route to <fx> node by effect type and parameter
+                mod_attribs = {
+                    "source": label,
+                    "target": f"{effect_type}.{parameter}"
+                }
+                ET.SubElement(tab_elem, "modulator", mod_attribs)
+
+            # (Legacy: also add label and control for backward compatibility)
             style_map = {
                 "knob": "rotary",
                 "slider": "linear_vertical",
