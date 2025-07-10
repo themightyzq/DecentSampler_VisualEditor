@@ -153,6 +153,18 @@ class MainWindow(QMainWindow):
         self.preset.cut_all_by_all = opts["cut_all_by_all"]
         self.preset.silencing_mode = opts["silencing_mode"]
 
+        # Sync mappings from UI before saving
+        from model import SampleMapping
+        valid_mappings = []
+        for m in self.sample_mapping_panel.samples:
+            if isinstance(m, dict):
+                if all(k in m for k in ("path", "lo", "hi", "root")):
+                    valid_mappings.append(SampleMapping(m["path"], m["lo"], m["hi"], m["root"]))
+            elif hasattr(m, "path") and hasattr(m, "lo") and hasattr(m, "hi") and hasattr(m, "root"):
+                valid_mappings.append(m)
+        print("DEBUG: Saving mappings:", valid_mappings)
+        self.preset.mappings = valid_mappings
+
         path, _ = QFileDialog.getSaveFileName(self, "Save .dspreset", "", "DecentSampler Preset (*.dspreset)")
         if not path:
             return

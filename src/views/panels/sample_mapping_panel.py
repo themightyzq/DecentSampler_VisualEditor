@@ -98,6 +98,11 @@ class SampleMappingPanel(QWidget):
         self.zone_panel.setVisible(False)
         layout.addWidget(self.zone_panel)
 
+        # Connect spin boxes to mapping update
+        self.lo_spin.valueChanged.connect(self.on_mapping_changed)
+        self.hi_spin.valueChanged.connect(self.on_mapping_changed)
+        self.root_spin.valueChanged.connect(self.on_mapping_changed)
+
         # Import/Auto-map buttons
         btn_layout = QHBoxLayout()
         btn_layout.setContentsMargins(0, 0, 0, 0)
@@ -117,7 +122,9 @@ class SampleMappingPanel(QWidget):
         self.table_widget.selectionModel().selectionChanged.connect(self.on_table_selection_changed)
 
     def set_samples(self, samples):
-        self.samples = samples
+        # Always store SampleMapping objects for bulletproof consistency
+        from model import SampleMapping
+        self.samples = []
         self.table_widget.setRowCount(0)
         for m in samples:
             if isinstance(m, dict):
@@ -125,11 +132,14 @@ class SampleMappingPanel(QWidget):
                 lo = m.get("lo", 0)
                 hi = m.get("hi", 0)
                 root = m.get("root", 0)
+                mapping_obj = SampleMapping(path, lo, hi, root)
             else:
                 path = getattr(m, "path", str(m))
                 lo = getattr(m, "lo", 0)
                 hi = getattr(m, "hi", 0)
                 root = getattr(m, "root", 0)
+                mapping_obj = m
+            self.samples.append(mapping_obj)
             filename = path.split("/")[-1] if path else ""
             key_range = f"{midi_note_name(lo)}–{midi_note_name(hi)} (root {midi_note_name(root)})"
             row = self.table_widget.rowCount()

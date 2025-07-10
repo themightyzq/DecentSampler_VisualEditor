@@ -523,6 +523,25 @@ class ProjectPropertiesPanel(QDockWidget):
                 el.min = min_val
                 el.max = max_val
                 el.default = default_val
+                # Set .target for effect controls
+                # Envelope controls handled elsewhere
+                if effect and param:
+                    # Map to DecentSampler parameter using EFFECTS_CATALOG
+                    from utils.effects_catalog import EFFECTS_CATALOG
+                    ds_param = None
+                    if effect in EFFECTS_CATALOG:
+                        # Try to find the param mapping
+                        param_defs = EFFECTS_CATALOG[effect].get("simple", []) + EFFECTS_CATALOG[effect].get("advanced", [])
+                        for pdef in param_defs:
+                            if pdef["name"] == param and "ds_param" in pdef:
+                                ds_param = pdef["ds_param"]
+                                break
+                        if not ds_param:
+                            # Fallback: use param name
+                            ds_param = param
+                    else:
+                        ds_param = param
+                    el.target = ds_param
                 mw.preset.ui.elements.append(el)
             if hasattr(mw, "preview_canvas"):
                 mw.preview_canvas.set_preset(mw.preset, "")
@@ -734,6 +753,15 @@ class ProjectPropertiesPanel(QDockWidget):
                 el.min = 0.0
                 el.max = 1.0
                 el.default = value
+                # Set DecentSampler target for standard envelope controls
+                if name == "Attack":
+                    el.target = "ENV_ATTACK"
+                elif name == "Decay":
+                    el.target = "ENV_DECAY"
+                elif name == "Sustain":
+                    el.target = "ENV_SUSTAIN"
+                elif name == "Release":
+                    el.target = "ENV_RELEASE"
                 elements.append(el)
         if hasattr(mw, "preview_canvas"):
             mw.preview_canvas.set_preset(mw.preset, "")
