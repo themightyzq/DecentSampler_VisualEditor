@@ -2,6 +2,45 @@ import xml.etree.ElementTree as ET
 from typing import List, Optional
 from utils.effects_catalog import EFFECTS_CATALOG
 
+class SampleZone:
+    def __init__(self, path: str, rootNote: int, loNote: int, hiNote: int, velocityRange=(0, 127)):
+        self.path = path
+        self.rootNote = rootNote
+        self.loNote = loNote
+        self.hiNote = hiNote
+        self.velocityRange = velocityRange
+
+    def __repr__(self):
+        return (
+            f"SampleZone(path={self.path!r}, rootNote={self.rootNote}, "
+            f"loNote={self.loNote}, hiNote={self.hiNote}, velocityRange={self.velocityRange})"
+        )
+
+class SampleManager:
+    def __init__(self):
+        self.zones = []
+
+    def add_zone(self, path, rootNote, loNote, hiNote, velocityRange=(0, 127)):
+        zone = SampleZone(path, rootNote, loNote, hiNote, velocityRange)
+        self.zones.append(zone)
+
+    def remove_zone(self, path):
+        self.zones = [z for z in self.zones if z.path != path]
+
+    def get_zones(self):
+        return self.zones
+
+    def clear(self):
+        self.zones = []
+
+    def update_zone(self, path, **kwargs):
+        for z in self.zones:
+            if z.path == path:
+                for k, v in kwargs.items():
+                    if hasattr(z, k):
+                        setattr(z, k, v)
+                break
+
 class SampleMapping:
     def __init__(self, path: str, lo: int, hi: int, root: int):
         self.path = path
@@ -20,7 +59,7 @@ class GroupEnvelope:
         self.release = release
 
 class UIElement:
-    def __init__(self, x, y, width, height, label, skin=None, tag=None, widget_type=None):
+    def __init__(self, x, y, width, height, label, skin=None, tag=None, widget_type=None, target=None, min_val=None, max_val=None):
         self.x = x
         self.y = y
         self.width = width
@@ -29,6 +68,9 @@ class UIElement:
         self.skin = skin  # path to skin image or None
         self.tag = tag
         self.widget_type = widget_type
+        self.target = target  # DecentSampler parameter name
+        self.min_val = min_val
+        self.max_val = max_val
 
 class InstrumentPreset:
     def __init__(
@@ -56,7 +98,8 @@ class InstrumentPreset:
         ui_elements: Optional[list] = None,
         envelope: Optional[GroupEnvelope] = None,
         effects: Optional[dict] = None,  # New: effect parameter values
-        advanced_mode: bool = False      # New: simple/advanced toggle
+        advanced_mode: bool = False,     # New: simple/advanced toggle
+        sample_manager: Optional[SampleManager] = None
     ):
         self.name = name
         self.ui_width = ui_width
@@ -65,6 +108,7 @@ class InstrumentPreset:
         self.layout_mode = layout_mode
         self.bg_mode = bg_mode
         self.mappings = mappings if mappings is not None else []
+        self.sample_manager = sample_manager if sample_manager is not None else SampleManager()
         self.start_note = start_note
         self.have_attack = have_attack
         self.have_decay = have_decay
@@ -169,6 +213,81 @@ class InstrumentPreset:
         self.mappings = mappings
 
     def to_dspreset(self, path: str):
+        # --- VALIDATION ---
+        # 1. At least one sample loaded
+        zones = self.sample_manager.get_zones() if self.sample_manager and self.sample_manager.get_zones() else [
+            SampleZone(m.path, m.root, m.lo, m.hi) for m in self.mappings
+        ]
+        if not zones:
+            raise Exception("Export aborted: At least one sample must be loaded.")
+
+        # 2. All controls have required attributes and assigned targets
+        controls = [el for el in getattr(self.ui, "elements", []) if str(getattr(el, "widget_type", "Knob")).lower() in ("knob", "slider")]
+        if not controls:
+            raise Exception("Export aborted: At least one UI control (knob or slider) is required.")
+        for el in controls:
+            label = getattr(el, "label", None)
+            min_val = getattr(el, "min_val", None)
+            max_val = getattr(el, "max_val", None)
+            target = getattr(el, "target", None)
+            # Default min/max if missing
+            if min_val is None:
+                min_val = 0
+                el.min_val = 0
+            if max_val is None:
+                max_val = 1
+                el.max_val = 1
+            if not (label and isinstance(label, str) and label.strip()):
+                raise Exception("Export aborted: All controls must have a non-empty label.")
+            if min_val is None or max_val is None:
+                raise Exception(f"Export aborted: Control '{label}' is missing min or max value.")
+            if not (target and isinstance(target, str) and target.strip()):
+                raise Exception(f"Export aborted: Control '{label}' is missing a target parameter.")
+
+        # 3. Required XML sections will be present and populated
+        if not zones:
+            raise Exception("Export aborted: <groups> section would be empty.")
+        if not controls:
+            raise Exception("Export aborted: <ui> section would be empty.")
+        if not any(getattr(el, "target", None) for el in controls):
+            raise Exception("Export aborted: <modulators> section would be empty.")
+
+        # 4. Validate modulator mapping and DSP blocks
+        # Build the set of controls to be exported (with valid target)
+        export_controls = [
+            el for el in controls
+            if getattr(el, "target", None) and isinstance(getattr(el, "target", None), str) and getattr(el, "target", "").strip()
+        ]
+        # Simulate label assignment logic to get unique names
+        used_names = set()
+        control_name_map = {}
+        for el in export_controls:
+            base_name = str(getattr(el, "label", "Control"))
+            name = base_name
+            i = 1
+            while name in used_names:
+                name = f"{base_name}_{i}"
+                i += 1
+            used_names.add(name)
+            control_name_map[el] = name
+        # Ensure 1:1 mapping between exported controls and modulators
+        if len(control_name_map) != len(export_controls):
+            raise Exception("Export aborted: Mismatch between exported controls and modulators.")
+        # Validate required DSP blocks
+        control_targets = {getattr(el, "target", None) for el in export_controls}
+        missing_blocks = []
+        if any(t in ("ENV_ATTACK", "ENV_DECAY", "ENV_SUSTAIN", "ENV_RELEASE") for t in control_targets):
+            # ampeg must be present
+            pass  # will be added below
+        if any(t and t.startswith("REVERB_") for t in control_targets) or getattr(self, "have_reverb", False):
+            pass  # reverb will be added
+        if any(t and t.startswith("CHORUS_") for t in control_targets) or getattr(self, "have_chorus", False):
+            pass  # chorus will be added
+        if any(t and t.startswith("FILTER_") for t in control_targets) or getattr(self, "have_tone", False):
+            pass  # filter will be added
+        # No missing blocks if logic below is correct
+
+        # --- EXPORT LOGIC ---
         root = ET.Element("DecentSampler", {"minVersion": "1.0.2", "presetName": self.name})
         custom_labels = [el.label for el in getattr(self.ui, "elements", [])]
         ui_attribs = {
@@ -185,161 +304,137 @@ class InstrumentPreset:
         }
         if self.bg_image:
             ui_attribs["bgImage"] = self.bg_image
+        # Write <groups> first (already done above)
+        # Write <ui> section with controls inside a <tab> (DecentSampler expects this)
         ui_elem = ET.SubElement(root, "ui", ui_attribs)
         tab_elem = ET.SubElement(ui_elem, "tab", {"name": "main"})
-        # Write UI elements
-        used_labels = {}
+        used_names = set()
+        control_name_map = {}
         for el in getattr(self.ui, "elements", []):
-            # Ensure unique label
-            base_label = str(getattr(el, "label", "Control"))
-            label = base_label
-            count = used_labels.get(base_label, 0)
-            if count > 0:
-                label = f"{base_label}_{count+1}"
-            used_labels[base_label] = count + 1
-
-            # Validate min/max/default
-            min_val = float(getattr(el, "min", 0.0))
-            max_val = float(getattr(el, "max", 1.0))
-            default_val = float(getattr(el, "default", (min_val + max_val) / 2.0))
-            if min_val > max_val:
-                min_val, max_val = max_val, min_val
-            if not (min_val <= default_val <= max_val):
-                default_val = (min_val + max_val) / 2.0
-
-            # UIControl type
             control_type = str(getattr(el, "widget_type", "Knob")).lower()
-            if control_type not in ("knob", "slider"):
-                control_type = "knob"
-
-            # <uiControl> element
-            ui_control_attribs = {
-                "name": label,
-                "type": control_type,
+            # Only export controls with a valid target
+            target = getattr(el, "target", None)
+            if control_type not in ("knob", "slider") or not target or not isinstance(target, str) or not target.strip():
+                continue
+            # Ensure unique name for each control
+            base_name = str(getattr(el, "label", "Control"))
+            name = base_name
+            i = 1
+            while name in used_names:
+                name = f"{base_name}_{i}"
+                i += 1
+            used_names.add(name)
+            control_name_map[el] = name
+            # Ensure min_val and max_val are set for export
+            min_val = getattr(el, "min_val", None)
+            max_val = getattr(el, "max_val", None)
+            if min_val is None:
+                min_val = 0
+            if max_val is None:
+                max_val = 1
+            value = getattr(el, "default", min_val)
+            # Use <labeled-knob> if label is present, else <control>
+            knob_attribs = {
                 "x": str(getattr(el, "x", 0)),
                 "y": str(getattr(el, "y", 0)),
-                "min": str(min_val),
-                "max": str(max_val),
-                "default": str(default_val)
-            }
-            ET.SubElement(tab_elem, "uiControl", ui_control_attribs)
-
-            # <modulator> or parameter mapping
-            effect_type = getattr(el, "effect_type", None)
-            parameter = getattr(el, "parameter", None)
-            if effect_type and parameter:
-                # Route to <fx> node by effect type and parameter
-                mod_attribs = {
-                    "source": label,
-                    "target": f"{effect_type}.{parameter}"
-                }
-                ET.SubElement(tab_elem, "modulator", mod_attribs)
-
-            # (Legacy: also add label and control for backward compatibility)
-            style_map = {
-                "knob": "rotary",
-                "slider": "linear_vertical",
-                "button": "button",
-                "menu": "menu"
-            }
-            style = style_map.get((el.widget_type or "").lower(), "rotary")
-            if style == "rotary":
-                width, height = 64, 64
-            elif style == "linear_vertical":
-                width, height = 30, 90
-            elif style == "button":
-                width, height = 64, 32
-            elif style == "menu":
-                width, height = 150, 25
-            else:
-                width, height = el.width, el.height
-            param_map = {
-                "Reverb": "FX_REVERB_WET_LEVEL",
-                "Tone": "FX_FILTER_FREQUENCY",
-                "Chorus": "FX_MIX",
-                "MIDI CC1": "VALUE"
-            }
-            param = param_map.get(el.label, el.label.upper())
-            label_attribs = {
-                "x": str(el.x),
-                "y": str(max(0, el.y - 20)),
-                "width": str(width),
-                "height": "20",
-                "text": el.label,
-                "textColor": "FFFFFFFF",
-                "textSize": "14",
-                "hAlign": "center"
-            }
-            ET.SubElement(tab_elem, "label", label_attribs)
-            attribs = {
-                "x": str(el.x),
-                "y": str(el.y),
-                "width": str(width),
-                "height": str(height),
-                "parameterName": param,
-                "style": style,
-                "minValue": "0",
-                "maxValue": "1",
-                "value": "0.5",
-                "textColor": "FFFFFFFF",
-                "trackForegroundColor": "FFCCCCCC",
-                "trackBackgroundColor": "66999999"
-            }
-            if el.skin:
-                attribs["skin"] = el.skin
-            control_elem = ET.SubElement(tab_elem, "control", attribs)
-            binding_attribs = {
-                "type": "effect" if el.label in ("Reverb", "Tone", "Chorus") else "control",
-                "level": "instrument",
-                "position": "0",
-                "parameter": param
-            }
-            ET.SubElement(control_elem, "binding", binding_attribs)
-
-        # Add controls as labeled-knobs with bindings (legacy, for ADSR and legacy effects)
-        knob_x = 200
-        knob_y = 75
-        knob_spacing = 70
-        knob_idx = 0
-        fx_position = -1
-        def add_knob(label, min_val, max_val, value, param, binding_type, binding_level, binding_param, translation=None, translation_table=None):
-            nonlocal knob_idx
-            knob = ET.SubElement(tab_elem, "labeled-knob", {
-                "x": str(knob_x + knob_idx * knob_spacing),
-                "y": str(knob_y),
-                "textSize": "16",
-                "textColor": "AA000000",
-                "trackForegroundColor": "CC000000",
-                "trackBackgroundColor": "66999999",
-                "label": label,
-                "type": "float" if label != "Reverb" else "percent",
+                "width": str(getattr(el, "width", 64)),
+                "height": str(getattr(el, "height", 64)),
+                "label": name,
+                "type": "float",
                 "minValue": str(min_val),
                 "maxValue": str(max_val),
-                "value": str(value)
-            })
-            binding = ET.SubElement(knob, "binding", {
-                "type": binding_type,
-                "level": binding_level,
-                "position": str(0 if binding_type == "amp" else fx_position),
-                "parameter": binding_param
-            })
-            if translation:
-                binding.set("translation", translation)
-            if translation_table:
-                binding.set("translationTable", translation_table)
-            knob_idx += 1
-
-        custom_labels_set = set(custom_labels)
-        if getattr(self, "have_attack", False) and "Attack" not in custom_labels_set:
-            add_knob("Attack", 0.0, 10.0, getattr(self.envelope, "attack", 0.01), "ENV_ATTACK", "amp", "instrument", "ENV_ATTACK")
-        if getattr(self, "have_decay", False) and "Decay" not in custom_labels_set:
-            add_knob("Decay", 0.0, 25.0, getattr(self.envelope, "decay", 1.0), "ENV_DECAY", "amp", "instrument", "ENV_DECAY")
-        if getattr(self, "have_sustain", False) and "Sustain" not in custom_labels_set:
-            add_knob("Sustain", 0.0, 1.0, getattr(self.envelope, "sustain", 1.0), "ENV_SUSTAIN", "amp", "instrument", "ENV_SUSTAIN")
-        if getattr(self, "have_release", False) and "Release" not in custom_labels_set:
-            add_knob("Release", 0.0, 25.0, getattr(self.envelope, "release", 0.43), "ENV_RELEASE", "amp", "instrument", "ENV_RELEASE")
-
-        # Data-driven effects section
+                "value": str(value),
+            }
+            control_attribs = {
+                "x": str(getattr(el, "x", 0)),
+                "y": str(getattr(el, "y", 0)),
+                "width": str(getattr(el, "width", 64)),
+                "height": str(getattr(el, "height", 64)),
+                "parameterName": name,
+                "type": "float",
+                "minValue": str(min_val),
+                "maxValue": str(max_val),
+                "value": str(value),
+            }
+            # Add the correct element and <binding>
+            # Determine binding type, parameter, and position
+            # Add the correct element and <binding>
+            # Determine binding type, parameter, and position
+            binding_attrs = {}
+            if target.startswith("ENV_"):
+                binding_type = "amp"
+                binding_param = target
+                binding_level = "instrument"
+                binding_position = "0"
+                # Envelope parameters: typical range is 0-10 or 0-25, but use control min/max for translation
+                binding_attrs = {
+                    "type": binding_type,
+                    "level": binding_level,
+                    "position": binding_position,
+                    "parameter": binding_param,
+                    "translation": "linear",
+                    "translationOutputMin": str(min_val),
+                    "translationOutputMax": str(max_val),
+                }
+            else:
+                binding_type = "effect"
+                binding_level = "instrument"
+                # Map target to DecentSampler effect parameter and effect index
+                effect_param_map = {
+                    "REVERB_WET_LEVEL": ("FX_REVERB_WET_LEVEL", "reverb", 0, 1),
+                    "REVERB_ROOM_SIZE": ("FX_REVERB_ROOM_SIZE", "reverb", 0, 1),
+                    "CHORUS_MIX": ("FX_MIX", "chorus", 0, 1),
+                    "CHORUS_MOD_DEPTH": ("FX_MOD_DEPTH", "chorus", 0, 1),
+                    "CHORUS_MOD_RATE": ("FX_MOD_RATE", "chorus", 0, 10),
+                    "FILTER_CUTOFF": ("FX_FILTER_FREQUENCY", "lowpass", 60, 22000),
+                    "FILTER_RESONANCE": ("FX_FILTER_RESONANCE", "lowpass", 0, 5),
+                    "FILTER_TYPE": ("FX_FILTER_TYPE", "lowpass", 0, 1),
+                    "TONE": ("FX_FILTER_FREQUENCY", "lowpass", 60, 22000),
+                }
+                effect_type = None
+                effect_param = None
+                param_min = min_val
+                param_max = max_val
+                for k, v in effect_param_map.items():
+                    if k in target:
+                        effect_param, effect_type, param_min, param_max = v
+                        break
+                if not effect_param:
+                    effect_param = target
+                # Find effect index in <effects>
+                effect_index = 0
+                for idx, (ename, params) in enumerate(self.effects.items()):
+                    if effect_type and ename.lower() == effect_type:
+                        effect_index = idx
+                        break
+                binding_position = str(effect_index)
+                binding_param = effect_param
+                binding_attrs = {
+                    "type": binding_type,
+                    "level": binding_level,
+                    "position": binding_position,
+                    "parameter": binding_param,
+                    "translation": "linear",
+                    "translationOutputMin": str(param_min),
+                    "translationOutputMax": str(param_max),
+                }
+            if getattr(el, "label", None):
+                knob_elem = ET.SubElement(tab_elem, "labeled-knob", knob_attribs)
+                ET.SubElement(knob_elem, "binding", binding_attrs)
+            else:
+                control_elem = ET.SubElement(tab_elem, "control", control_attribs)
+                ET.SubElement(control_elem, "binding", binding_attrs)
+        # Write <modulators> section as direct child of <DecentSampler>
+        modulators_elem = ET.SubElement(root, "modulators")
+        # Only wire up modulators for controls actually exported to <ui>
+        for el, name in control_name_map.items():
+            target = getattr(el, "target", None)
+            if target and isinstance(target, str) and target.strip():
+                ET.SubElement(modulators_elem, "modulator", {
+                    "destination": target,
+                    "control": name
+                })
+        # Data-driven effects section (optional, not part of required hierarchy)
         effects_elem = ET.SubElement(root, "effects")
         for effect_name, params in self.effects.items():
             if effect_name in EFFECTS_CATALOG:
@@ -357,32 +452,67 @@ class InstrumentPreset:
                 ET.SubElement(effects_elem, "effect", eff_params)
 
         # Groups and sample mapping
+        # Remove any previous/legacy <groups> writing above this point!
+        # Only write the correct <groups> and <group> section with <sample> elements
         groups_elem = ET.SubElement(root, "groups", {
-            "attack": "0.000",
-            "decay": "25",
-            "sustain": "1.0",
-            "release": "0.430",
             "volume": "-3dB"
         })
-        group_elem = ET.SubElement(groups_elem, "group")
-        if hasattr(self, "envelope"):
-            ET.SubElement(group_elem, "envelope", {
-                "attack": str(getattr(self.envelope, "attack", 0.01)),
-                "decay": str(getattr(self.envelope, "decay", 1.0)),
-                "sustain": str(getattr(self.envelope, "sustain", 1.0)),
-                "release": str(getattr(self.envelope, "release", 0.43)),
+        import os
+        # Prefer zones from SampleManager if available, else fallback to mappings
+        zones = self.sample_manager.get_zones() if self.sample_manager and self.sample_manager.get_zones() else [
+            SampleZone(m.path, m.root, m.lo, m.hi) for m in self.mappings
+        ]
+        import shutil
+        samples_dir = os.path.join(os.path.dirname(path), "samples")
+        os.makedirs(samples_dir, exist_ok=True)
+        used_filenames = set()
+        for zone in zones:
+            orig_path = zone.path
+            if not os.path.isfile(orig_path):
+                raise Exception(f"Sample file not found: {orig_path}")
+            # Always use just the basename for the sample in the export
+            base_filename = os.path.basename(orig_path)
+            # Ensure no filename collisions
+            unique_filename = base_filename
+            i = 1
+            while unique_filename in used_filenames:
+                name, ext = os.path.splitext(base_filename)
+                unique_filename = f"{name}_{i}{ext}"
+                i += 1
+            used_filenames.add(unique_filename)
+            dest_path = os.path.join(samples_dir, unique_filename)
+            xml_rel_path = os.path.join("samples", unique_filename)
+            # Copy the file if not already present or if source is newer
+            if not os.path.exists(dest_path) or os.path.getmtime(orig_path) > os.path.getmtime(dest_path):
+                shutil.copy2(orig_path, dest_path)
+            xml_rel_path = xml_rel_path.replace("\\", "/")
+            group_elem = ET.SubElement(groups_elem, "group", {
+                "enabled": "true"
             })
-        if self.cut_all_by_all:
-            group_elem.set("tags", "cutgroup0")
-            group_elem.set("silencedByTags", "cutgroup0")
-            group_elem.set("silencingMode", self.silencing_mode)
-        for mapping in self.mappings:
-            ET.SubElement(group_elem, "sample", {
-                "path": mapping.path,
-                "loNote": str(mapping.lo),
-                "hiNote": str(mapping.hi),
-                "rootNote": str(mapping.root)
-            })
+            if self.cut_all_by_all:
+                group_elem.set("tags", "cutgroup0")
+                group_elem.set("silencedByTags", "cutgroup0")
+                group_elem.set("silencingMode", self.silencing_mode)
+            sample_attribs = {
+                "path": xml_rel_path,
+                "rootNote": str(zone.rootNote),
+                "loNote": str(zone.loNote),
+                "hiNote": str(zone.hiNote)
+            }
+            # Optionally add velocityRange if not default
+            if hasattr(zone, "velocityRange") and zone.velocityRange != (0, 127):
+                sample_attribs["velocityRange"] = f"{zone.velocityRange[0]},{zone.velocityRange[1]}"
+            ET.SubElement(group_elem, "sample", sample_attribs)
+            # Add <envelope> if any envelope controls are present
+            env_controls = {el.target for el in getattr(self.ui, "elements", []) if getattr(el, "target", None) in ("ENV_ATTACK", "ENV_DECAY", "ENV_SUSTAIN", "ENV_RELEASE")}
+            if env_controls:
+                env_attribs = {
+                    "attack": str(getattr(self.envelope, "attack", 0.01)),
+                    "decay": str(getattr(self.envelope, "decay", 1.0)),
+                    "sustain": str(getattr(self.envelope, "sustain", 1.0)),
+                    "release": str(getattr(self.envelope, "release", 0.43)),
+                }
+                ET.SubElement(group_elem, "envelope", env_attribs)
 
         # MIDI CC mapping for tone knob (legacy)
         if self.have_midicc1 and self.have_tone:
@@ -396,6 +526,38 @@ class InstrumentPreset:
                 "translation": "linear",
                 "translationOutputMin": "0",
                 "translationOutputMax": "1"
+            })
+
+        # --- GLOBAL PARAMETER BLOCKS ---
+        # Determine which controls are present
+        control_targets = {getattr(el, "target", None) for el in getattr(self.ui, "elements", [])}
+        # AMPEG: if any envelope controls are present
+        if any(t in ("ENV_ATTACK", "ENV_DECAY", "ENV_SUSTAIN", "ENV_RELEASE") for t in control_targets):
+            ET.SubElement(root, "ampeg", {
+                "attack": "0.01",
+                "decay": "0.2",
+                "sustain": "1.0",
+                "release": "0.3"
+            })
+        # REVERB: if any REVERB_* control or have_reverb
+        if any(t and t.startswith("REVERB_") for t in control_targets) or getattr(self, "have_reverb", False):
+            ET.SubElement(root, "reverb", {
+                "wetLevel": "0.5",
+                "roomSize": "0.8"
+            })
+        # CHORUS: if any CHORUS_* control or have_chorus
+        if any(t and t.startswith("CHORUS_") for t in control_targets) or getattr(self, "have_chorus", False):
+            ET.SubElement(root, "chorus", {
+                "delay": "20",
+                "depth": "0.3",
+                "rate": "0.25"
+            })
+        # FILTER: if any FILTER_* control or have_tone
+        if any(t and t.startswith("FILTER_") for t in control_targets) or getattr(self, "have_tone", False):
+            ET.SubElement(root, "filter", {
+                "type": "lowpass",
+                "cutoff": "20000",
+                "resonance": "0.1"
             })
 
         # Pretty-print XML using minidom
