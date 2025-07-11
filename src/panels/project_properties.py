@@ -60,6 +60,16 @@ class AddControlDialog(QDialog):
         self.y_spin.setValue(100)
         self.form_layout.addRow("Y Position:", self.y_spin)
 
+        # Width/Height
+        self.width_spin = QSpinBox()
+        self.width_spin.setRange(16, 512)
+        self.width_spin.setValue(64)
+        self.form_layout.addRow("Width:", self.width_spin)
+        self.height_spin = QSpinBox()
+        self.height_spin.setRange(16, 512)
+        self.height_spin.setValue(64)
+        self.form_layout.addRow("Height:", self.height_spin)
+
         # Min/Max/Default value
         self.min_spin = QDoubleSpinBox()
         self.min_spin.setRange(-99999, 99999)
@@ -80,6 +90,21 @@ class AddControlDialog(QDialog):
         self.default_spin.setValue(0.5)
         self.default_spin.setSingleStep(0.01)
         self.form_layout.addRow("Default Value:", self.default_spin)
+
+        # MIDI CC (optional)
+        self.midi_cc_spin = QSpinBox()
+        self.midi_cc_spin.setRange(-1, 127)
+        self.midi_cc_spin.setValue(-1)
+        self.midi_cc_spin.setSpecialValueText("None")
+        self.form_layout.addRow("MIDI CC (optional):", self.midi_cc_spin)
+
+        # Orientation (for sliders only)
+        self.orientation_combo = QComboBox()
+        self.orientation_combo.addItems(["horizontal", "vertical"])
+        self.form_layout.addRow("Slider Orientation:", self.orientation_combo)
+        self.orientation_combo.setVisible(False)
+        self.widget_combo.currentTextChanged.connect(self._on_widget_type_changed)
+        self._on_widget_type_changed(self.widget_combo.currentText())
 
         self.layout.addLayout(self.form_layout)
         self.layout.addWidget(self.error_label)
@@ -147,6 +172,10 @@ class AddControlDialog(QDialog):
             self.error_label.setText("\n".join(errors))
             return
         self.accept()
+
+    def _on_widget_type_changed(self, widget_type):
+        # Show orientation only for sliders
+        self.orientation_combo.setVisible(widget_type.lower() == "slider")
 
     def _update_param_dropdown(self):
         self.param_combo.clear()
@@ -236,10 +265,15 @@ class ProjectPropertiesPanel(QDockWidget):
         self.adsr_widget_types = {}
         self.adsr_x_spins = {}
         self.adsr_y_spins = {}
+        self.adsr_orientations = {}
         for name in ["Attack", "Decay", "Sustain", "Release"]:
             combo = QComboBox()
             combo.addItems(["Knob", "Slider"])
             self.adsr_widget_types[name] = combo
+        for name in ["Attack", "Decay", "Sustain", "Release"]:
+            orientation_combo = QComboBox()
+            orientation_combo.addItems(["horizontal", "vertical"])
+            self.adsr_orientations[name] = orientation_combo
         for name in ["Attack", "Decay", "Sustain", "Release"]:
             x_spin = QSpinBox()
             x_spin.setRange(0, 2000)
@@ -277,6 +311,8 @@ class ProjectPropertiesPanel(QDockWidget):
         attack_row.addWidget(self.attack_spin)
         attack_row.addWidget(QLabel("Type:"))
         attack_row.addWidget(self.adsr_widget_types["Attack"])
+        attack_row.addWidget(QLabel("Orientation:"))
+        attack_row.addWidget(self.adsr_orientations["Attack"])
         attack_row.addWidget(QLabel("X:"))
         attack_row.addWidget(self.adsr_x_spins["Attack"])
         attack_row.addWidget(QLabel("Y:"))
@@ -289,6 +325,8 @@ class ProjectPropertiesPanel(QDockWidget):
         decay_row.addWidget(self.decay_spin)
         decay_row.addWidget(QLabel("Type:"))
         decay_row.addWidget(self.adsr_widget_types["Decay"])
+        decay_row.addWidget(QLabel("Orientation:"))
+        decay_row.addWidget(self.adsr_orientations["Decay"])
         decay_row.addWidget(QLabel("X:"))
         decay_row.addWidget(self.adsr_x_spins["Decay"])
         decay_row.addWidget(QLabel("Y:"))
@@ -301,6 +339,8 @@ class ProjectPropertiesPanel(QDockWidget):
         sustain_row.addWidget(self.sustain_spin)
         sustain_row.addWidget(QLabel("Type:"))
         sustain_row.addWidget(self.adsr_widget_types["Sustain"])
+        sustain_row.addWidget(QLabel("Orientation:"))
+        sustain_row.addWidget(self.adsr_orientations["Sustain"])
         sustain_row.addWidget(QLabel("X:"))
         sustain_row.addWidget(self.adsr_x_spins["Sustain"])
         sustain_row.addWidget(QLabel("Y:"))
@@ -313,6 +353,8 @@ class ProjectPropertiesPanel(QDockWidget):
         release_row.addWidget(self.release_spin)
         release_row.addWidget(QLabel("Type:"))
         release_row.addWidget(self.adsr_widget_types["Release"])
+        release_row.addWidget(QLabel("Orientation:"))
+        release_row.addWidget(self.adsr_orientations["Release"])
         release_row.addWidget(QLabel("X:"))
         release_row.addWidget(self.adsr_x_spins["Release"])
         release_row.addWidget(QLabel("Y:"))
@@ -473,9 +515,15 @@ class ProjectPropertiesPanel(QDockWidget):
             widget_type = dialog.widget_combo.currentText()
             x = dialog.x_spin.value()
             y = dialog.y_spin.value()
+            width = dialog.width_spin.value()
+            height = dialog.height_spin.value()
             min_val = dialog.min_spin.value()
             max_val = dialog.max_spin.value()
             default_val = dialog.default_spin.value()
+            midi_cc = dialog.midi_cc_spin.value()
+            if midi_cc == -1:
+                midi_cc = None
+            orientation = dialog.orientation_combo.currentText() if widget_type.lower() == "slider" else None
             self._add_new_control(
                 label=label,
                 effect=effect,
@@ -483,12 +531,16 @@ class ProjectPropertiesPanel(QDockWidget):
                 widget_type=widget_type,
                 x=x,
                 y=y,
+                width=width,
+                height=height,
                 min_val=min_val,
                 max_val=max_val,
-                default_val=default_val
+                default_val=default_val,
+                midi_cc=midi_cc,
+                orientation=orientation
             )
 
-    def _add_new_control(self, label, effect, param, widget_type, x, y, min_val, max_val, default_val, edit_index=None):
+    def _add_new_control(self, label, effect, param, widget_type, x, y, width, height, min_val, max_val, default_val, edit_index=None, midi_cc=None, orientation=None):
         # Add or update the control in the model and UI
         from model import UIElement
         mw = self.parent()
@@ -498,6 +550,8 @@ class ProjectPropertiesPanel(QDockWidget):
                 el = mw.preset.ui.elements[edit_index]
                 el.x = x
                 el.y = y
+                el.width = width
+                el.height = height
                 el.label = label
                 el.tag = widget_type
                 el.widget_type = widget_type
@@ -508,40 +562,83 @@ class ProjectPropertiesPanel(QDockWidget):
                 el.default = default_val
             else:
                 # Add new control
-                el = UIElement(
-                    x=x,
-                    y=y,
-                    width=64,
-                    height=64,
-                    label=label,
-                    skin=None,
-                    tag=widget_type,
-                    widget_type=widget_type
-                )
-                el.effect_type = effect
-                el.parameter = param
-                el.min = min_val
-                el.max = max_val
-                el.default = default_val
-                # Set .target for effect controls
-                # Envelope controls handled elsewhere
-                if effect and param:
+                # Build binding for amp/ADSR or effect
+                bindings = []
+                if label.lower() in ["attack", "decay", "sustain", "release"]:
+                    param_map = {
+                        "attack": "ENV_ATTACK",
+                        "decay": "ENV_DECAY",
+                        "sustain": "ENV_SUSTAIN",
+                        "release": "ENV_RELEASE"
+                    }
+                    param_name = param_map[label.lower()]
+                    binding = {
+                        "type": "amp",
+                        "level": "instrument",
+                        "position": "0",
+                        "parameter": param_name
+                    }
+                    bindings = [binding]
+                    target = param_name
+                elif effect and param:
                     # Map to DecentSampler parameter using EFFECTS_CATALOG
                     from utils.effects_catalog import EFFECTS_CATALOG
                     ds_param = None
                     if effect in EFFECTS_CATALOG:
-                        # Try to find the param mapping
                         param_defs = EFFECTS_CATALOG[effect].get("simple", []) + EFFECTS_CATALOG[effect].get("advanced", [])
                         for pdef in param_defs:
                             if pdef["name"] == param and "ds_param" in pdef:
                                 ds_param = pdef["ds_param"]
                                 break
                         if not ds_param:
-                            # Fallback: use param name
                             ds_param = param
                     else:
                         ds_param = param
-                    el.target = ds_param
+                    # Find effect index (position) in preset.effects
+                    effect_index = 0
+                    for idx, (ename, params) in enumerate(getattr(mw.preset, "effects", {}).items()):
+                        if ename.lower() == effect.lower():
+                            effect_index = idx
+                            break
+                    binding = {
+                        "type": "effect",
+                        "level": "instrument",
+                        "position": str(effect_index),
+                        "parameter": ds_param,
+                        "effectType": EFFECTS_CATALOG[effect]["type"] if effect in EFFECTS_CATALOG else effect.lower(),
+                        "translation": "linear",
+                        "translationOutputMin": 0,
+                        "translationOutputMax": 1
+                    }
+                    bindings = [binding]
+                    target = ds_param
+                else:
+                    bindings = []
+                    target = None
+
+                # Set tag to "labeled-slider" for sliders, "labeled-knob" for knobs
+                tag_value = "labeled-slider" if widget_type.lower() == "slider" else "labeled-knob"
+                el = UIElement(
+                    x=x,
+                    y=y,
+                    width=width,
+                    height=height,
+                    label=label,
+                    skin=None,
+                    tag=tag_value,
+                    widget_type=widget_type,
+                    target=target,
+                    min_val=min_val,
+                    max_val=max_val,
+                    bindings=bindings,
+                    midi_cc=midi_cc,
+                    orientation=orientation
+                )
+                el.effect_type = effect
+                el.parameter = param
+                el.min = min_val
+                el.max = max_val
+                el.default = default_val
                 mw.preset.ui.elements.append(el)
             if hasattr(mw, "preview_canvas"):
                 mw.preview_canvas.set_preset(mw.preset, "")
@@ -723,12 +820,14 @@ class ProjectPropertiesPanel(QDockWidget):
             if checkboxes[i].isChecked():
                 # Add UIElement for enabled ADSR
                 widget_type = self.adsr_widget_types[name].currentText()
+                orientation = self.adsr_orientations[name].currentText() if widget_type.lower() == "slider" else None
                 x = self.adsr_x_spins[name].value()
                 y = self.adsr_y_spins[name].value()
                 value = spins[i].value()
                 el = type("UIElement", (), {})()  # Dummy UIElement if import fails
                 try:
                     from model import UIElement as RealUIElement
+                    tag_value = "labeled-slider" if widget_type.lower() == "slider" else "labeled-knob"
                     el = RealUIElement(
                         x=x,
                         y=y,
@@ -736,8 +835,9 @@ class ProjectPropertiesPanel(QDockWidget):
                         height=64,
                         label=name,
                         skin=None,
-                        tag=widget_type,
-                        widget_type=widget_type
+                        tag=tag_value,
+                        widget_type=widget_type,
+                        orientation=orientation
                     )
                 except Exception:
                     el.x = x
@@ -746,22 +846,47 @@ class ProjectPropertiesPanel(QDockWidget):
                     el.height = 64
                     el.label = name
                     el.skin = None
-                    el.tag = widget_type
+                    el.tag = "labeled-slider" if widget_type.lower() == "slider" else "labeled-knob"
                     el.widget_type = widget_type
+                    el.orientation = orientation
                 el.effect_type = None
                 el.parameter = None
                 el.min = 0.0
                 el.max = 1.0
                 el.default = value
-                # Set DecentSampler target for standard envelope controls
+                # Set DecentSampler target and binding for standard envelope controls
                 if name == "Attack":
                     el.target = "ENV_ATTACK"
+                    el.bindings = [{
+                        "type": "amp",
+                        "level": "instrument",
+                        "position": "0",
+                        "parameter": "ENV_ATTACK"
+                    }]
                 elif name == "Decay":
                     el.target = "ENV_DECAY"
+                    el.bindings = [{
+                        "type": "amp",
+                        "level": "instrument",
+                        "position": "0",
+                        "parameter": "ENV_DECAY"
+                    }]
                 elif name == "Sustain":
                     el.target = "ENV_SUSTAIN"
+                    el.bindings = [{
+                        "type": "amp",
+                        "level": "instrument",
+                        "position": "0",
+                        "parameter": "ENV_SUSTAIN"
+                    }]
                 elif name == "Release":
                     el.target = "ENV_RELEASE"
+                    el.bindings = [{
+                        "type": "amp",
+                        "level": "instrument",
+                        "position": "0",
+                        "parameter": "ENV_RELEASE"
+                    }]
                 elements.append(el)
         if hasattr(mw, "preview_canvas"):
             mw.preview_canvas.set_preset(mw.preset, "")

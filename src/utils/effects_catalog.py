@@ -5,10 +5,10 @@ EFFECTS_CATALOG = {
     "Reverb": {
         "type": "reverb",
         "simple": [
-            {"name": "wetLevel", "label": "Amount", "min": 0.0, "max": 1.0, "default": 0.5}
+            {"name": "wetLevel", "label": "Amount", "min": 0.0, "max": 1.0, "default": 0.5, "ds_param": "FX_REVERB_WET_LEVEL"}
         ],
         "advanced": [
-            {"name": "wetLevel", "label": "Wet Level", "min": 0.0, "max": 1.0, "default": 0.5},
+            {"name": "wetLevel", "label": "Wet Level", "min": 0.0, "max": 1.0, "default": 0.5, "ds_param": "FX_REVERB_WET_LEVEL"},
             {"name": "roomSize", "label": "Room Size", "min": 0.0, "max": 1.0, "default": 0.7},
             {"name": "damping", "label": "Damping", "min": 0.0, "max": 1.0, "default": 0.3}
         ]
@@ -29,10 +29,10 @@ EFFECTS_CATALOG = {
     "Chorus": {
         "type": "chorus",
         "simple": [
-            {"name": "mix", "label": "Amount", "min": 0.0, "max": 1.0, "default": 0.5}
+            {"name": "mix", "label": "Amount", "min": 0.0, "max": 1.0, "default": 0.5, "ds_param": "FX_MIX"}
         ],
         "advanced": [
-            {"name": "mix", "label": "Mix", "min": 0.0, "max": 1.0, "default": 0.5},
+            {"name": "mix", "label": "Mix", "min": 0.0, "max": 1.0, "default": 0.5, "ds_param": "FX_MIX"},
             {"name": "modDepth", "label": "Mod Depth", "min": 0.0, "max": 1.0, "default": 0.2},
             {"name": "modRate", "label": "Mod Rate (Hz)", "min": 0.0, "max": 10.0, "default": 0.2}
         ]
@@ -63,10 +63,10 @@ EFFECTS_CATALOG = {
     "Lowpass": {
         "type": "lowpass",
         "simple": [
-            {"name": "frequency", "label": "Cutoff", "min": 0.0, "max": 22000.0, "default": 22000.0}
+            {"name": "frequency", "label": "Cutoff", "min": 0.0, "max": 22000.0, "default": 22000.0, "ds_param": "FX_FILTER_FREQUENCY"}
         ],
         "advanced": [
-            {"name": "frequency", "label": "Cutoff", "min": 0.0, "max": 22000.0, "default": 22000.0},
+            {"name": "frequency", "label": "Cutoff", "min": 0.0, "max": 22000.0, "default": 22000.0, "ds_param": "FX_FILTER_FREQUENCY"},
             {"name": "resonance", "label": "Resonance", "min": 0.0, "max": 1.0, "default": 0.7}
         ]
     },
