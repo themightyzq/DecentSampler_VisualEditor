@@ -56,11 +56,33 @@ class PreviewCanvas(QWidget):
                 # Draw a debug rectangle to show where the element should be
                 painter.setPen(Qt.red)
                 painter.drawRect(rect)
-                tag = getattr(el, "tag", None) or getattr(el, "widget_type", "Knob")
-                widget_cls = WIDGET_CLASS_MAP.get(tag, FallbackWidget)
+                # Prefer widget_type for rendering, fallback to tag, then "Knob"
+                widget_type = getattr(el, "widget_type", None)
+                tag = getattr(el, "tag", None)
+                widget_key = None
+                if widget_type in WIDGET_CLASS_MAP:
+                    widget_key = widget_type
+                elif tag in WIDGET_CLASS_MAP:
+                    widget_key = tag
+                else:
+                    widget_key = "Knob"
+                widget_cls = WIDGET_CLASS_MAP.get(widget_key, FallbackWidget)
                 label = getattr(el, "label", "")
                 skin = getattr(el, "skin", None)
-                pixmap = widget_cls.render_to_pixmap(rect.width(), rect.height(), label, skin)
+                # Pass orientation for sliders
+                if widget_key == "Slider":
+                    orientation = getattr(el, "orientation", "horizontal")
+                    pixmap = widget_cls.render_to_pixmap(rect.width(), rect.height(), label, skin, orientation)
+                else:
+                    if widget_cls.__name__ == "KnobWidget":
+                        pixmap = widget_cls.render_to_pixmap(
+                            rect.width(), rect.height(), label, skin,
+                            textSize=16,
+                            trackForegroundColor="CC000000",
+                            trackBackgroundColor="66999999"
+                        )
+                    else:
+                        pixmap = widget_cls.render_to_pixmap(rect.width(), rect.height(), label, skin)
                 painter.drawPixmap(rect, pixmap)
 
         # (ADSR envelope preview removed from preview canvas; now shown in properties panel)

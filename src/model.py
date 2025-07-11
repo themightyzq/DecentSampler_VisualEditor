@@ -59,7 +59,7 @@ class GroupEnvelope:
         self.release = release
 
 class UIElement:
-    def __init__(self, x, y, width, height, label, skin=None, tag=None, widget_type=None, target=None, min_val=None, max_val=None):
+    def __init__(self, x, y, width, height, label, skin=None, tag=None, widget_type=None, target=None, min_val=None, max_val=None, bindings=None, options=None, midi_cc=None, orientation=None):
         self.x = x
         self.y = y
         self.width = width
@@ -71,6 +71,10 @@ class UIElement:
         self.target = target  # DecentSampler parameter name
         self.min_val = min_val
         self.max_val = max_val
+        self.bindings = bindings if bindings is not None else []  # List of binding dicts
+        self.options = options if options is not None else []     # For menu: list of option objects
+        self.midi_cc = midi_cc
+        self.orientation = orientation
 
 class InstrumentPreset:
     def __init__(
@@ -290,9 +294,16 @@ class InstrumentPreset:
         # --- EXPORT LOGIC ---
         root = ET.Element("DecentSampler", {"minVersion": "1.0.2", "presetName": self.name})
         custom_labels = [el.label for el in getattr(self.ui, "elements", [])]
+        # DecentSampler requires bgColor (8-digit ARGB hex) on <ui>
+        bg_color = getattr(self, "bg_color", None)
+        if not bg_color or len(bg_color) not in (8, 9):  # Accepts #AARRGGBB or AARRGGBB
+            bg_color = "FF222222"  # fallback: opaque dark gray
+        if bg_color.startswith("#"):
+            bg_color = bg_color[1:]
         ui_attribs = {
             "width": str(self.ui_width),
             "height": str(self.ui_height),
+            "bgColor": bg_color,
             "layoutMode": self.layout_mode,
             "bgMode": self.bg_mode,
             "haveReverb": "false" if "Reverb" in custom_labels else ("true" if getattr(self, "have_reverb", False) else "false"),
@@ -311,12 +322,27 @@ class InstrumentPreset:
         used_names = set()
         control_name_map = {}
         for el in getattr(self.ui, "elements", []):
-            control_type = str(getattr(el, "widget_type", "Knob")).lower()
-            # Only export controls with a valid target
-            target = getattr(el, "target", None)
-            if control_type not in ("knob", "slider") or not target or not isinstance(target, str) or not target.strip():
+            # Menu/option support
+            if getattr(el, "tag", None) == "Menu" or getattr(el, "widget_type", None) == "Menu":
+                menu_attribs = {
+                    "x": str(getattr(el, "x", 0)),
+                    "y": str(getattr(el, "y", 0)),
+                    "width": str(getattr(el, "width", 120)),
+                    "height": str(getattr(el, "height", 30)),
+                    "value": str(getattr(el, "value", 1)),
+                    "textColor": getattr(el, "textColor", "FF000000"),
+                }
+                menu_elem = ET.SubElement(tab_elem, "menu", menu_attribs)
+                for opt in getattr(el, "options", []):
+                    option_elem = ET.SubElement(menu_elem, "option", {"name": getattr(opt, "name", "Option")})
+                    for binding in getattr(opt, "bindings", []):
+                        ET.SubElement(option_elem, "binding", {k: str(v) for k, v in binding.items() if v is not None})
                 continue
-            # Ensure unique name for each control
+
+            control_type = str(getattr(el, "widget_type", "Knob")).lower()
+            target = getattr(el, "target", None)
+            if control_type not in ("knob", "slider", "control") or not target or not isinstance(target, str) or not target.strip():
+                continue
             base_name = str(getattr(el, "label", "Control"))
             name = base_name
             i = 1
@@ -325,7 +351,6 @@ class InstrumentPreset:
                 i += 1
             used_names.add(name)
             control_name_map[el] = name
-            # Ensure min_val and max_val are set for export
             min_val = getattr(el, "min_val", None)
             max_val = getattr(el, "max_val", None)
             if min_val is None:
@@ -333,7 +358,14 @@ class InstrumentPreset:
             if max_val is None:
                 max_val = 1
             value = getattr(el, "default", min_val)
-            # Use <labeled-knob> if label is present, else <control>
+            style = getattr(el, "style", None)
+            orientation = getattr(el, "orientation", None)
+            text_color = getattr(el, "textColor", "FF000000")
+            text_size = getattr(el, "textSize", "12")
+            track_fg = getattr(el, "trackForegroundColor", None)
+            track_bg = getattr(el, "trackBackgroundColor", None)
+            show_label = getattr(el, "showLabel", None)
+            default_value = getattr(el, "default", None)
             knob_attribs = {
                 "x": str(getattr(el, "x", 0)),
                 "y": str(getattr(el, "y", 0)),
@@ -344,7 +376,21 @@ class InstrumentPreset:
                 "minValue": str(min_val),
                 "maxValue": str(max_val),
                 "value": str(value),
+                "textColor": text_color,
+                "textSize": text_size,
             }
+            if style:
+                knob_attribs["style"] = style
+            if orientation:
+                knob_attribs["orientation"] = orientation
+            if track_fg:
+                knob_attribs["trackForegroundColor"] = track_fg
+            if track_bg:
+                knob_attribs["trackBackgroundColor"] = track_bg
+            if show_label is not None:
+                knob_attribs["showLabel"] = str(show_label).lower()
+            if default_value is not None:
+                knob_attribs["defaultValue"] = str(default_value)
             control_attribs = {
                 "x": str(getattr(el, "x", 0)),
                 "y": str(getattr(el, "y", 0)),
@@ -355,101 +401,56 @@ class InstrumentPreset:
                 "minValue": str(min_val),
                 "maxValue": str(max_val),
                 "value": str(value),
+                "textColor": text_color,
+                "textSize": text_size,
             }
-            # Add the correct element and <binding>
-            # Determine binding type, parameter, and position
-            # Add the correct element and <binding>
-            # Determine binding type, parameter, and position
-            binding_attrs = {}
-            if target.startswith("ENV_"):
-                binding_type = "amp"
-                binding_param = target
-                binding_level = "instrument"
-                binding_position = "0"
-                # Envelope parameters: typical range is 0-10 or 0-25, but use control min/max for translation
-                binding_attrs = {
-                    "type": binding_type,
-                    "level": binding_level,
-                    "position": binding_position,
-                    "parameter": binding_param,
-                    "translation": "linear",
-                    "translationOutputMin": str(min_val),
-                    "translationOutputMax": str(max_val),
-                }
-            else:
-                binding_type = "effect"
-                binding_level = "instrument"
-                # Map target to DecentSampler effect parameter and effect index
-                effect_param_map = {
-                    "REVERB_WET_LEVEL": ("FX_REVERB_WET_LEVEL", "reverb", 0, 1),
-                    "REVERB_ROOM_SIZE": ("FX_REVERB_ROOM_SIZE", "reverb", 0, 1),
-                    "CHORUS_MIX": ("FX_MIX", "chorus", 0, 1),
-                    "CHORUS_MOD_DEPTH": ("FX_MOD_DEPTH", "chorus", 0, 1),
-                    "CHORUS_MOD_RATE": ("FX_MOD_RATE", "chorus", 0, 10),
-                    "FILTER_CUTOFF": ("FX_FILTER_FREQUENCY", "lowpass", 60, 22000),
-                    "FILTER_RESONANCE": ("FX_FILTER_RESONANCE", "lowpass", 0, 5),
-                    "FILTER_TYPE": ("FX_FILTER_TYPE", "lowpass", 0, 1),
-                    "TONE": ("FX_FILTER_FREQUENCY", "lowpass", 60, 22000),
-                }
-                effect_type = None
-                effect_param = None
-                param_min = min_val
-                param_max = max_val
-                for k, v in effect_param_map.items():
-                    if k in target:
-                        effect_param, effect_type, param_min, param_max = v
-                        break
-                if not effect_param:
-                    effect_param = target
-                # Find effect index in <effects>
-                effect_index = 0
-                for idx, (ename, params) in enumerate(self.effects.items()):
-                    if effect_type and ename.lower() == effect_type:
-                        effect_index = idx
-                        break
-                binding_position = str(effect_index)
-                binding_param = effect_param
-                binding_attrs = {
-                    "type": binding_type,
-                    "level": binding_level,
-                    "position": binding_position,
-                    "parameter": binding_param,
-                    "translation": "linear",
-                    "translationOutputMin": str(param_min),
-                    "translationOutputMax": str(param_max),
-                }
+            if style:
+                control_attribs["style"] = style
+            if orientation:
+                control_attribs["orientation"] = orientation
+            if track_fg:
+                control_attribs["trackForegroundColor"] = track_fg
+            if track_bg:
+                control_attribs["trackBackgroundColor"] = track_bg
+            if show_label is not None:
+                control_attribs["showLabel"] = str(show_label).lower()
+            if default_value is not None:
+                control_attribs["defaultValue"] = str(default_value)
+            # Write all bindings for this control
             if getattr(el, "label", None):
                 knob_elem = ET.SubElement(tab_elem, "labeled-knob", knob_attribs)
-                ET.SubElement(knob_elem, "binding", binding_attrs)
+                for binding in getattr(el, "bindings", []):
+                    ET.SubElement(knob_elem, "binding", {k: str(v) for k, v in binding.items() if v is not None})
             else:
                 control_elem = ET.SubElement(tab_elem, "control", control_attribs)
-                ET.SubElement(control_elem, "binding", binding_attrs)
+                for binding in getattr(el, "bindings", []):
+                    ET.SubElement(control_elem, "binding", {k: str(v) for k, v in binding.items() if v is not None})
         # Write <modulators> section as direct child of <DecentSampler>
-        modulators_elem = ET.SubElement(root, "modulators")
-        # Only wire up modulators for controls actually exported to <ui>
-        for el, name in control_name_map.items():
-            target = getattr(el, "target", None)
-            if target and isinstance(target, str) and target.strip():
-                ET.SubElement(modulators_elem, "modulator", {
-                    "destination": target,
-                    "control": name
-                })
-        # Data-driven effects section (optional, not part of required hierarchy)
+        # Only write <modulators> for actual LFOs/envelopes, not for UI controls
+        # (No-op for now; add LFO/envelope support here if needed)
+        # Write <effects> section with all effects referenced by UI controls
         effects_elem = ET.SubElement(root, "effects")
-        for effect_name, params in self.effects.items():
-            if effect_name in EFFECTS_CATALOG:
-                eff_meta = EFFECTS_CATALOG[effect_name]
-                eff_type = eff_meta["type"]
-                eff_params = {"type": eff_type}
-                # Use advanced or simple param set
-                param_defs = eff_meta["advanced"] if self.advanced_mode else eff_meta["simple"]
-                for param_def in param_defs:
-                    pname = param_def["name"]
-                    if pname in params:
-                        eff_params[pname] = str(params[pname])
-                    else:
-                        eff_params[pname] = str(param_def.get("default", ""))
-                ET.SubElement(effects_elem, "effect", eff_params)
+        # Collect all effect controls and their parameters
+        effect_controls = [el for el in getattr(self.ui, "elements", []) if any(
+            b.get("type") == "effect" for b in getattr(el, "bindings", []))]
+        # Map: {effect_type: {param: value}}
+        effect_param_map = {}
+        for el in effect_controls:
+            for binding in getattr(el, "bindings", []):
+                if binding.get("type") == "effect":
+                    effect_type = binding.get("effectType")
+                    param = binding.get("parameter")
+                    value = getattr(el, "default", getattr(el, "min_val", 0))
+                    if effect_type and param:
+                        if effect_type not in effect_param_map:
+                            effect_param_map[effect_type] = {}
+                        effect_param_map[effect_type][param] = str(value)
+        # Write each effect with its parameters
+        for effect_type, params in effect_param_map.items():
+            eff_params = {"type": effect_type}
+            eff_params.update(params)
+            ET.SubElement(effects_elem, "effect", eff_params)
+        # Do NOT write <parameter> elements at the top level (not supported by DecentSampler)
 
         # Groups and sample mapping
         # Remove any previous/legacy <groups> writing above this point!
@@ -514,19 +515,30 @@ class InstrumentPreset:
                 }
                 ET.SubElement(group_elem, "envelope", env_attribs)
 
-        # MIDI CC mapping for tone knob (legacy)
-        if self.have_midicc1 and self.have_tone:
+        # MIDI CC mapping for controls with midi_cc set
+        midi_controls = [el for el in getattr(self.ui, "elements", []) if getattr(el, "midi_cc", None) is not None]
+        if midi_controls:
             midi_elem = ET.SubElement(root, "midi")
-            cc_elem = ET.SubElement(midi_elem, "cc", {"number": "1"})
-            binding = ET.SubElement(cc_elem, "binding", {
-                "level": "ui",
-                "type": "control",
-                "parameter": "VALUE",
-                "position": str(knob_idx - 1),
-                "translation": "linear",
-                "translationOutputMin": "0",
-                "translationOutputMax": "1"
-            })
+            cc_map = {}
+            for el in midi_controls:
+                cc_num = str(getattr(el, "midi_cc"))
+                if cc_num not in cc_map:
+                    cc_elem = ET.SubElement(midi_elem, "cc", {"number": cc_num})
+                    cc_map[cc_num] = cc_elem
+                # Use position as index in ui.elements
+                position = str(getattr(self.ui.elements, "index", lambda x: None)(el)) if hasattr(self.ui.elements, "index") else "0"
+                # Fallback: use order in midi_controls
+                if position == "None":
+                    position = str(midi_controls.index(el))
+                ET.SubElement(cc_map[cc_num], "binding", {
+                    "level": "ui",
+                    "type": "control",
+                    "parameter": "VALUE",
+                    "position": position,
+                    "translation": "linear",
+                    "translationOutputMin": "0",
+                    "translationOutputMax": "1"
+                })
 
         # --- GLOBAL PARAMETER BLOCKS ---
         # Determine which controls are present

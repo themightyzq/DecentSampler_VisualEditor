@@ -4,7 +4,16 @@ from PyQt5.QtCore import Qt, QRect
 
 class KnobWidget(QWidget):
     @classmethod
-    def render_to_pixmap(cls, width, height, label, skin=None):
+    def render_to_pixmap(
+        cls,
+        width,
+        height,
+        label,
+        skin=None,
+        textSize=16,
+        trackForegroundColor="CC000000",
+        trackBackgroundColor="66999999"
+    ):
         pixmap = QPixmap(width, height)
         pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
@@ -17,18 +26,26 @@ class KnobWidget(QWidget):
                 painter.setPen(Qt.red)
                 painter.drawRect(rect)
         else:
-            painter.setPen(Qt.darkGray)
-            painter.setBrush(QColor(220, 220, 220))
+            # Draw track background
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(QColor("#" + trackBackgroundColor) if not trackBackgroundColor.startswith("0x") else QColor(int(trackBackgroundColor, 16)))
             painter.drawEllipse(rect)
+            # Draw track foreground (border)
+            pen = QPen(QColor("#" + trackForegroundColor) if not trackForegroundColor.startswith("0x") else QColor(int(trackForegroundColor, 16)))
+            pen.setWidth(2)
+            painter.setPen(pen)
+            painter.setBrush(Qt.NoBrush)
+            painter.drawEllipse(rect)
+            # Draw label
             painter.setPen(Qt.black)
-            painter.setFont(QFont("Arial", max(8, int(height * 0.18))))
+            painter.setFont(QFont("Arial", textSize))
             painter.drawText(rect, Qt.AlignCenter, label)
         painter.end()
         return pixmap
 
 class SliderWidget(QWidget):
     @classmethod
-    def render_to_pixmap(cls, width, height, label, skin=None):
+    def render_to_pixmap(cls, width, height, label, skin=None, orientation="horizontal"):
         pixmap = QPixmap(width, height)
         pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
@@ -43,7 +60,10 @@ class SliderWidget(QWidget):
         else:
             painter.setPen(Qt.darkGray)
             painter.setBrush(QColor(200, 200, 255))
-            slider_rect = QRect(rect.x(), rect.y() + rect.height() // 2 - 6, rect.width(), 12)
+            if orientation == "vertical":
+                slider_rect = QRect(rect.x() + rect.width() // 2 - 6, rect.y(), 12, rect.height())
+            else:
+                slider_rect = QRect(rect.x(), rect.y() + rect.height() // 2 - 6, rect.width(), 12)
             painter.drawRect(slider_rect)
             painter.setPen(Qt.black)
             painter.setFont(QFont("Arial", max(8, int(height * 0.18))))
