@@ -752,9 +752,15 @@ class ProjectPropertiesPanel(QDockWidget):
             widget_type = dialog.widget_combo.currentText()
             x = dialog.x_spin.value()
             y = dialog.y_spin.value()
+            width = dialog.width_spin.value() if hasattr(dialog, "width_spin") else getattr(el, "width", 64)
+            height = dialog.height_spin.value() if hasattr(dialog, "height_spin") else getattr(el, "height", 64)
             min_val = dialog.min_spin.value()
             max_val = dialog.max_spin.value()
             default_val = dialog.default_spin.value()
+            midi_cc = dialog.midi_cc_spin.value() if hasattr(dialog, "midi_cc_spin") else getattr(el, "midi_cc", None)
+            if midi_cc == -1:
+                midi_cc = None
+            orientation = dialog.orientation_combo.currentText() if hasattr(dialog, "orientation_combo") and widget_type.lower() == "slider" else getattr(el, "orientation", None)
             self._add_new_control(
                 label=label,
                 effect=effect,
@@ -762,10 +768,14 @@ class ProjectPropertiesPanel(QDockWidget):
                 widget_type=widget_type,
                 x=x,
                 y=y,
+                width=width,
+                height=height,
                 min_val=min_val,
                 max_val=max_val,
                 default_val=default_val,
-                edit_index=idx
+                edit_index=idx,
+                midi_cc=midi_cc,
+                orientation=orientation
             )
 
     def _delete_control(self, idx):

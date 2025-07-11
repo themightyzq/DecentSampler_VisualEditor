@@ -417,14 +417,18 @@ class InstrumentPreset:
             if default_value is not None:
                 control_attribs["defaultValue"] = str(default_value)
             # Write all bindings for this control
-            if getattr(el, "label", None):
-                knob_elem = ET.SubElement(tab_elem, "labeled-knob", knob_attribs)
-                for binding in getattr(el, "bindings", []):
-                    ET.SubElement(knob_elem, "binding", {k: str(v) for k, v in binding.items() if v is not None})
-            else:
+            if str(getattr(el, "widget_type", "Knob")).lower() == "slider":
+                # Export as <control> with style
+                style = "linear_vertical" if getattr(el, "orientation", None) == "vertical" else "linear_horizontal"
+                control_attribs["style"] = style
                 control_elem = ET.SubElement(tab_elem, "control", control_attribs)
                 for binding in getattr(el, "bindings", []):
                     ET.SubElement(control_elem, "binding", {k: str(v) for k, v in binding.items() if v is not None})
+            else:
+                # Export as <labeled-knob>
+                knob_elem = ET.SubElement(tab_elem, "labeled-knob", knob_attribs)
+                for binding in getattr(el, "bindings", []):
+                    ET.SubElement(knob_elem, "binding", {k: str(v) for k, v in binding.items() if v is not None})
         # Write <modulators> section as direct child of <DecentSampler>
         # Only write <modulators> for actual LFOs/envelopes, not for UI controls
         # (No-op for now; add LFO/envelope support here if needed)
