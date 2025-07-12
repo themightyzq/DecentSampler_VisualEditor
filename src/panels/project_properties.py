@@ -252,21 +252,7 @@ class ProjectPropertiesPanel(QDockWidget):
         # (Removed duplicate MiniEnvelopePlot from the form layout to avoid duplicate previews)
         # (This duplicate class and instantiation have been removed to fix the set_adsr signature error)
 
-        # Simple/Advanced toggle
-        self.advanced_mode_checkbox = QCheckBox("Advanced Mode")
-        self.advanced_mode_checkbox.setChecked(False)
-        self.advanced_mode_checkbox.setToolTip("Show all effect parameters (advanced users)")
-        self.advanced_mode_checkbox.stateChanged.connect(self._on_advanced_mode_toggled)
-        form_layout.addRow(self.advanced_mode_checkbox)
-
-        # Advanced Mode control list (hidden by default)
-        self.advanced_controls_container = QWidget()
-        self.advanced_controls_layout = QVBoxLayout()
-        self.advanced_controls_layout.setContentsMargins(0, 0, 0, 0)
-        self.advanced_controls_layout.setSpacing(4)
-        self.advanced_controls_container.setLayout(self.advanced_controls_layout)
-        self.advanced_controls_container.setVisible(False)
-        form_layout.addRow(self.advanced_controls_container)
+        # (Advanced Mode UI removed)
 
         # Controls sub-panel: widget type selectors for each effect
         controls_group = QGroupBox("Effects Controls")
@@ -308,14 +294,86 @@ class ProjectPropertiesPanel(QDockWidget):
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
-        # Add only the "Add Control" button, centered/aligned
+        # Add the "Add Control" button, centered/aligned
         self.add_control_btn = QPushButton("Add Control")
         self.add_control_btn.setMinimumHeight(40)
         self.add_control_btn.setStyleSheet("font-size: 16px;")
         self.add_control_btn.clicked.connect(self._open_add_control_modal)
         self.controls_layout.addWidget(self.add_control_btn, 0, 0, 1, -1, alignment=Qt.AlignCenter)
-        # Update advanced controls list if visible
-        self._refresh_advanced_controls_list()
+
+        # Add a row for each control element
+        mw = self.parent()
+        if hasattr(mw, "preset") and hasattr(mw.preset, "ui") and hasattr(mw.preset.ui, "elements"):
+            for idx, el in enumerate(mw.preset.ui.elements):
+                row_widget = QWidget()
+                row_layout = QHBoxLayout()
+                row_layout.setContentsMargins(0, 0, 0, 0)
+                row_layout.setSpacing(6)
+                # Enable/disable checkbox
+                enable_checkbox = QCheckBox()
+                is_enabled = getattr(el, "enabled", True)
+                enable_checkbox.setChecked(is_enabled)
+                enable_checkbox.stateChanged.connect(lambda state, i=idx: self._toggle_control_enabled(i, state))
+                row_layout.addWidget(enable_checkbox)
+                # Label
+                row_layout.addWidget(QLabel(str(getattr(el, "label", ""))))
+
+                # X position (editable)
+                x_spin = QSpinBox()
+                x_spin.setRange(0, 2000)
+                x_spin.setValue(getattr(el, "x", 0))
+                x_spin.valueChanged.connect(lambda value, i=idx: self._update_control_property(i, "x", value))
+                row_layout.addWidget(QLabel("X:"))
+                row_layout.addWidget(x_spin)
+
+                # Y position (editable)
+                y_spin = QSpinBox()
+                y_spin.setRange(0, 2000)
+                y_spin.setValue(getattr(el, "y", 0))
+                y_spin.valueChanged.connect(lambda value, i=idx: self._update_control_property(i, "y", value))
+                row_layout.addWidget(QLabel("Y:"))
+                row_layout.addWidget(y_spin)
+
+                # Width (editable)
+                width_spin = QSpinBox()
+                width_spin.setRange(16, 512)
+                width_spin.setValue(getattr(el, "width", 64))
+                width_spin.valueChanged.connect(lambda value, i=idx: self._update_control_property(i, "width", value))
+                row_layout.addWidget(QLabel("W:"))
+                row_layout.addWidget(width_spin)
+
+                # Height (editable)
+                height_spin = QSpinBox()
+                height_spin.setRange(16, 512)
+                height_spin.setValue(getattr(el, "height", 64))
+                height_spin.valueChanged.connect(lambda value, i=idx: self._update_control_property(i, "height", value))
+                row_layout.addWidget(QLabel("H:"))
+                row_layout.addWidget(height_spin)
+
+                # Edit icon
+                edit_btn = QPushButton("✎")
+                edit_btn.setFixedWidth(28)
+                edit_btn.setToolTip("Edit")
+                edit_btn.clicked.connect(lambda _, i=idx: self._edit_control(i))
+                row_layout.addWidget(edit_btn)
+                # Delete icon
+                del_btn = QPushButton("🗑")
+                del_btn.setFixedWidth(28)
+                del_btn.setToolTip("Delete")
+                del_btn.clicked.connect(lambda _, i=idx: self._delete_control(i))
+                row_layout.addWidget(del_btn)
+                row_widget.setLayout(row_layout)
+                self.controls_layout.addWidget(row_widget, idx + 1, 0, 1, -1)
+
+    def _update_control_property(self, idx, prop, value):
+        mw = self.parent()
+        if hasattr(mw, "preset") and hasattr(mw.preset, "ui") and hasattr(mw.preset.ui, "elements"):
+            elements = mw.preset.ui.elements
+            if 0 <= idx < len(elements):
+                setattr(elements[idx], prop, value)
+                if hasattr(mw, "preview_canvas"):
+                    mw.preview_canvas.set_preset(mw.preset, "")
+        # No need to call _rebuild_effect_controls() here to avoid losing focus on spinboxes
 
     def _open_add_control_modal(self):
         mw = self.parent()
@@ -457,17 +515,11 @@ class ProjectPropertiesPanel(QDockWidget):
                 mw.preset.ui.elements.append(el)
             if hasattr(mw, "preview_canvas"):
                 mw.preview_canvas.set_preset(mw.preset, "")
-            self._refresh_advanced_controls_list()
+            self._rebuild_effect_controls()
         # Optionally, refresh the controls panel or UI as needed
         # self._rebuild_effect_controls()
 
-    def _on_advanced_mode_toggled(self, state):
-        checked = state == Qt.Checked
-        self.advanced_controls_container.setVisible(checked)
-        if checked:
-            self._refresh_advanced_controls_list()
-        else:
-            self._clear_advanced_controls_list()
+    # (Advanced mode methods removed)
 
     def _clear_advanced_controls_list(self):
         while self.advanced_controls_layout.count():
@@ -533,7 +585,7 @@ class ProjectPropertiesPanel(QDockWidget):
         mw.preset.ui.elements = [el for el in elements if getattr(el, "enabled", True)]
         if hasattr(mw, "preview_canvas"):
             mw.preview_canvas.set_preset(mw.preset, "")
-        self._refresh_advanced_controls_list()
+        self._rebuild_effect_controls()
 
     def _edit_control(self, idx):
         mw = self.parent()
@@ -600,7 +652,7 @@ class ProjectPropertiesPanel(QDockWidget):
         del mw.preset.ui.elements[idx]
         if hasattr(mw, "preview_canvas"):
             mw.preview_canvas.set_preset(mw.preset, "")
-        self._refresh_advanced_controls_list()
+        self._rebuild_effect_controls()
 
     def set_flags_from_preset(self, preset):
         # Set effect checkboxes from preset
