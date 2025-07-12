@@ -247,171 +247,7 @@ class ProjectPropertiesPanel(QDockWidget):
         form_layout.addRow(QLabel("BG Image:"), self.bg_image_edit)
         form_layout.addRow("", self.bg_image_btn)
 
-        # ADSR controls (moved from dockable panel)
-        adsr_layout = QFormLayout()
-        adsr_layout.setContentsMargins(0, 0, 0, 0)
-        adsr_layout.setSpacing(12)
-        # ADSR checkboxes and spinboxes
-        self.attack_checkbox = QCheckBox()
-        self.attack_checkbox.setChecked(False)
-        self.decay_checkbox = QCheckBox()
-        self.decay_checkbox.setChecked(False)
-        self.sustain_checkbox = QCheckBox()
-        self.sustain_checkbox.setChecked(False)
-        self.release_checkbox = QCheckBox()
-        self.release_checkbox.setChecked(False)
-
-        # Widget type and position controls for ADSR
-        self.adsr_widget_types = {}
-        self.adsr_x_spins = {}
-        self.adsr_y_spins = {}
-        self.adsr_orientations = {}
-        for name in ["Attack", "Decay", "Sustain", "Release"]:
-            combo = QComboBox()
-            combo.addItems(["Knob", "Slider"])
-            self.adsr_widget_types[name] = combo
-        for name in ["Attack", "Decay", "Sustain", "Release"]:
-            orientation_combo = QComboBox()
-            orientation_combo.addItems(["horizontal", "vertical"])
-            self.adsr_orientations[name] = orientation_combo
-        for name in ["Attack", "Decay", "Sustain", "Release"]:
-            x_spin = QSpinBox()
-            x_spin.setRange(0, 2000)
-            x_spin.setValue(40)
-            self.adsr_x_spins[name] = x_spin
-            y_spin = QSpinBox()
-            y_spin.setRange(0, 2000)
-            y_spin.setValue(100)
-            self.adsr_y_spins[name] = y_spin
-
-        self.attack_spin = QDoubleSpinBox()
-        self.attack_spin.setRange(0.0, 10.0)
-        self.attack_spin.setSingleStep(0.01)
-        self.attack_spin.setDecimals(3)
-        self.attack_spin.setToolTip("Attack time (seconds)")
-        self.decay_spin = QDoubleSpinBox()
-        self.decay_spin.setRange(0.0, 10.0)
-        self.decay_spin.setSingleStep(0.01)
-        self.decay_spin.setDecimals(3)
-        self.decay_spin.setToolTip("Decay time (seconds)")
-        self.sustain_spin = QDoubleSpinBox()
-        self.sustain_spin.setRange(0.0, 1.0)
-        self.sustain_spin.setSingleStep(0.01)
-        self.sustain_spin.setDecimals(3)
-        self.sustain_spin.setToolTip("Sustain level (0-1)")
-        self.release_spin = QDoubleSpinBox()
-        self.release_spin.setRange(0.0, 10.0)
-        self.release_spin.setSingleStep(0.01)
-        self.release_spin.setDecimals(3)
-        self.release_spin.setToolTip("Release time (seconds)")
-
-        attack_row = QHBoxLayout()
-        attack_row.addWidget(self.attack_checkbox)
-        attack_row.addWidget(QLabel("Attack"))
-        attack_row.addWidget(self.attack_spin)
-        attack_row.addWidget(QLabel("Type:"))
-        attack_row.addWidget(self.adsr_widget_types["Attack"])
-        attack_row.addWidget(QLabel("Orientation:"))
-        attack_row.addWidget(self.adsr_orientations["Attack"])
-        attack_row.addWidget(QLabel("X:"))
-        attack_row.addWidget(self.adsr_x_spins["Attack"])
-        attack_row.addWidget(QLabel("Y:"))
-        attack_row.addWidget(self.adsr_y_spins["Attack"])
-        adsr_layout.addRow(attack_row)
-
-        decay_row = QHBoxLayout()
-        decay_row.addWidget(self.decay_checkbox)
-        decay_row.addWidget(QLabel("Decay"))
-        decay_row.addWidget(self.decay_spin)
-        decay_row.addWidget(QLabel("Type:"))
-        decay_row.addWidget(self.adsr_widget_types["Decay"])
-        decay_row.addWidget(QLabel("Orientation:"))
-        decay_row.addWidget(self.adsr_orientations["Decay"])
-        decay_row.addWidget(QLabel("X:"))
-        decay_row.addWidget(self.adsr_x_spins["Decay"])
-        decay_row.addWidget(QLabel("Y:"))
-        decay_row.addWidget(self.adsr_y_spins["Decay"])
-        adsr_layout.addRow(decay_row)
-
-        sustain_row = QHBoxLayout()
-        sustain_row.addWidget(self.sustain_checkbox)
-        sustain_row.addWidget(QLabel("Sustain"))
-        sustain_row.addWidget(self.sustain_spin)
-        sustain_row.addWidget(QLabel("Type:"))
-        sustain_row.addWidget(self.adsr_widget_types["Sustain"])
-        sustain_row.addWidget(QLabel("Orientation:"))
-        sustain_row.addWidget(self.adsr_orientations["Sustain"])
-        sustain_row.addWidget(QLabel("X:"))
-        sustain_row.addWidget(self.adsr_x_spins["Sustain"])
-        sustain_row.addWidget(QLabel("Y:"))
-        sustain_row.addWidget(self.adsr_y_spins["Sustain"])
-        adsr_layout.addRow(sustain_row)
-
-        release_row = QHBoxLayout()
-        release_row.addWidget(self.release_checkbox)
-        release_row.addWidget(QLabel("Release"))
-        release_row.addWidget(self.release_spin)
-        release_row.addWidget(QLabel("Type:"))
-        release_row.addWidget(self.adsr_widget_types["Release"])
-        release_row.addWidget(QLabel("Orientation:"))
-        release_row.addWidget(self.adsr_orientations["Release"])
-        release_row.addWidget(QLabel("X:"))
-        release_row.addWidget(self.adsr_x_spins["Release"])
-        release_row.addWidget(QLabel("Y:"))
-        release_row.addWidget(self.adsr_y_spins["Release"])
-        adsr_layout.addRow(release_row)
-        form_layout.addRow(QLabel("ADSR Envelope Settings:"))
-        form_layout.addRow(adsr_layout)
-        form_layout.addRow(QLabel(""))  # Spacer
-
-        # ADSR preview (MiniEnvelopePlot) at the very bottom
-        class MiniEnvelopePlot(QWidget):
-            def __init__(self, parent=None):
-                super().__init__(parent)
-                self.setFixedSize(120, 60)
-                self.attack = 0.01
-                self.decay = 0.01
-                self.sustain = 1.0
-                self.release = 0.01
-                self.enabled = [False, False, False, False]  # [A, D, S, R]
-            def set_adsr(self, a, d, s, r, enabled=None):
-                self.attack, self.decay, self.sustain, self.release = a, d, s, r
-                if enabled is not None:
-                    self.enabled = enabled
-                self.update()
-            def paintEvent(self, event):
-                painter = QPainter(self)
-                w, h = self.width(), self.height()
-                margin = 10
-                x0, y0 = margin, h - margin
-                # If disabled, set value to 0 for that segment
-                a = self.attack if self.enabled[0] else 0
-                d = self.decay if self.enabled[1] else 0
-                s = self.sustain if self.enabled[2] else 0
-                r = self.release if self.enabled[3] else 0
-                total = a + d + r + 0.01
-                x1 = x0 + int(w * a / total * 0.4)
-                x2 = x1 + int(w * d / total * 0.3)
-                x3 = w - margin - int(w * r / total * 0.3)
-                y_top = margin
-                y_sus = y0 - int((h - 2 * margin) * s * 0.7) if self.enabled[2] else y0
-                points = [
-                    (x0, y0),
-                    (x1, y_top if self.enabled[0] else y0),
-                    (x2, y_sus),
-                    (x3, y_sus),
-                    (w - margin, y0)
-                ]
-                painter.setPen(QColor(100, 100, 255))
-                for i in range(len(points) - 1):
-                    painter.drawLine(int(points[i][0]), int(points[i][1]), int(points[i+1][0]), int(points[i+1][1]))
-                painter.setPen(Qt.black)
-                painter.drawText(5, 15, "ADSR")
-        self.env_plot = MiniEnvelopePlot()
-        form_layout.addRow(QLabel("ADSR Envelope Preview:"))
-        form_layout.addRow(self.env_plot)
-        form_layout.addRow(QLabel(""))  # Spacer
-
+        # Simple/Advanced toggle
         # Mini envelope plot
         # (Removed duplicate MiniEnvelopePlot from the form layout to avoid duplicate previews)
         # (This duplicate class and instantiation have been removed to fix the set_adsr signature error)
@@ -463,28 +299,7 @@ class ProjectPropertiesPanel(QDockWidget):
         self.ui_width_spin.valueChanged.connect(self._live_update)
         self.ui_height_spin.valueChanged.connect(self._live_update)
         self.bg_image_edit.textChanged.connect(self._live_update)
-        # Connect ADSR spinboxes and checkboxes to update preview
-        self.attack_spin.valueChanged.connect(self._on_adsr_control_changed)
-        self.decay_spin.valueChanged.connect(self._on_adsr_control_changed)
-        self.sustain_spin.valueChanged.connect(self._on_adsr_control_changed)
-        self.release_spin.valueChanged.connect(self._on_adsr_control_changed)
-        self.attack_checkbox.stateChanged.connect(self._on_adsr_control_changed)
-        self.decay_checkbox.stateChanged.connect(self._on_adsr_control_changed)
-        self.sustain_checkbox.stateChanged.connect(self._on_adsr_control_changed)
-        self.release_checkbox.stateChanged.connect(self._on_adsr_control_changed)
-        self.adsr_widget_types["Attack"].currentIndexChanged.connect(self._on_adsr_control_changed)
-        self.adsr_widget_types["Decay"].currentIndexChanged.connect(self._on_adsr_control_changed)
-        self.adsr_widget_types["Sustain"].currentIndexChanged.connect(self._on_adsr_control_changed)
-        self.adsr_widget_types["Release"].currentIndexChanged.connect(self._on_adsr_control_changed)
-        self.adsr_x_spins["Attack"].valueChanged.connect(self._on_adsr_control_changed)
-        self.adsr_x_spins["Decay"].valueChanged.connect(self._on_adsr_control_changed)
-        self.adsr_x_spins["Sustain"].valueChanged.connect(self._on_adsr_control_changed)
-        self.adsr_x_spins["Release"].valueChanged.connect(self._on_adsr_control_changed)
-        self.adsr_y_spins["Attack"].valueChanged.connect(self._on_adsr_control_changed)
-        self.adsr_y_spins["Decay"].valueChanged.connect(self._on_adsr_control_changed)
-        self.adsr_y_spins["Sustain"].valueChanged.connect(self._on_adsr_control_changed)
-        self.adsr_y_spins["Release"].valueChanged.connect(self._on_adsr_control_changed)
-        self._on_adsr_control_changed()
+        # (ADSR signal connections removed)
 
     def _rebuild_effect_controls(self):
         # Remove all widgets from the layout
@@ -1045,15 +860,7 @@ class ProjectPropertiesPanel(QDockWidget):
             "have_tone": self.enable_checkboxes["Tone"].isChecked() if "Tone" in self.enable_checkboxes else False,
             "have_chorus": self.enable_checkboxes["Chorus"].isChecked() if "Chorus" in self.enable_checkboxes else False,
             "have_midicc1": False,
-            "have_attack": self.attack_checkbox.isChecked(),
-            "have_decay": self.decay_checkbox.isChecked(),
-            "have_sustain": self.sustain_checkbox.isChecked(),
-            "have_release": self.release_checkbox.isChecked(),
             "cut_all_by_all": False,
             "silencing_mode": "normal",
-            "attack": self.attack_spin.value(),
-            "decay": self.decay_spin.value(),
-            "sustain": self.sustain_spin.value(),
-            "release": self.release_spin.value(),
             "widget_types": {effect: combo.currentText() for effect, combo in self.widget_type_combos.items()},
         }
