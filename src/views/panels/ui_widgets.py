@@ -168,52 +168,180 @@ class ADSRParameterCard(QWidget):
         super().__init__(parent)
         self.param_name = param_name
         self.setObjectName(f"{param_name}_adsr_card")
-        card_layout = QVBoxLayout()
-        card_layout.setContentsMargins(8, 8, 8, 8)
-        card_layout.setSpacing(6)
 
-        # Enable checkbox and label field
+        # Card styling for visual grouping
+        self.setStyleSheet("""
+            QWidget#{}_adsr_card {{
+                border: 1.5px solid #cccccc;
+                border-radius: 8px;
+                background: #f8f8f8;
+            }}
+            QLineEdit {{
+                background: #fff;
+                border: 1px solid #bbb;
+                border-radius: 4px;
+                padding: 2px 6px;
+            }}
+            QDoubleSpinBox {{
+                min-width: 60px;
+                max-width: 80px;
+            }}
+            QPushButton {{
+                min-width: 70px;
+                max-width: 90px;
+            }}
+        """.format(param_name))
+
+        card_layout = QVBoxLayout()
+        card_layout.setContentsMargins(10, 10, 10, 10)
+        card_layout.setSpacing(8)
+
+        # Parameter label as a functional button (centered)
         top_row = QHBoxLayout()
-        self.enable_cb = QCheckBox()
-        self.enable_cb.setChecked(True)
-        top_row.addWidget(self.enable_cb)
-        self.label_edit = QLineEdit(param_name)
-        self.label_edit.setFixedWidth(70)
-        top_row.addWidget(self.label_edit)
+        top_row.setContentsMargins(0, 0, 0, 0)
+        top_row.setSpacing(4)
+        top_row.addStretch()
+        self.label_btn = QPushButton(param_name)
+        self.label_btn.setCheckable(True)
+        self.label_btn.setChecked(False)
+        self.label_btn.setFlat(False)
+        self.label_btn.setCursor(Qt.PointingHandCursor)
+        self.label_btn.setMinimumWidth(90)
+        self.label_btn.setMaximumWidth(120)
+        # Style to match "Settings" button, with blue highlight when checked
+        self.label_btn.setStyleSheet("""
+            QPushButton {
+                font-weight: bold;
+                font-size: 15px;
+                background: #e0e0e0;
+                border: 1.5px solid #b0b0b0;
+                border-radius: 6px;
+                color: #222;
+                padding: 4px 12px;
+            }
+            QPushButton:checked {
+                background: #2979ff;
+                color: #fff;
+                border: 1.5px solid #1565c0;
+            }
+            QPushButton:!checked {
+                background: #e0e0e0;
+                color: #222;
+                border: 1.5px solid #b0b0b0;
+            }
+        """)
+        top_row.addWidget(self.label_btn)
         top_row.addStretch()
         card_layout.addLayout(top_row)
 
-        # Value control and type selector
-        mid_row = QHBoxLayout()
+        # Value control (centered, no "Value:" label)
         self.value_spin = QDoubleSpinBox()
         self.value_spin.setRange(*value_range)
         self.value_spin.setSingleStep(value_step)
         self.value_spin.setDecimals(value_decimals)
         self.value_spin.setValue(value)
+        self.value_spin.setAlignment(Qt.AlignCenter)
         self.value_spin.setFixedWidth(70)
-        mid_row.addWidget(QLabel("Value:"))
-        mid_row.addWidget(self.value_spin)
+        value_row = QHBoxLayout()
+        value_row.setContentsMargins(0, 0, 0, 0)
+        value_row.addStretch()
+        value_row.addWidget(self.value_spin)
+        value_row.addStretch()
+        card_layout.addLayout(value_row)
+
+        # X/Y and Width/Height controls (real-time, below value)
+        from PyQt5.QtWidgets import QSpinBox
+
+        # X/Y row
+        xy_row = QHBoxLayout()
+        xy_row.setContentsMargins(0, 0, 0, 0)
+        xy_row.setSpacing(4)
+        self.x_spin = QSpinBox()
+        self.x_spin.setRange(0, 2000)
+        self.x_spin.setValue(getattr(self, "_adsr_x", 40))
+        self.x_spin.setFixedWidth(48)
+        self.y_spin = QSpinBox()
+        self.y_spin.setRange(0, 2000)
+        self.y_spin.setValue(getattr(self, "_adsr_y", 100))
+        self.y_spin.setFixedWidth(48)
+        xy_row.addStretch()
+        xy_row.addWidget(QLabel("X:"))
+        xy_row.addWidget(self.x_spin)
+        xy_row.addWidget(QLabel("Y:"))
+        xy_row.addWidget(self.y_spin)
+        xy_row.addStretch()
+        card_layout.addLayout(xy_row)
+
+        # Width/Height row
+        wh_row = QHBoxLayout()
+        wh_row.setContentsMargins(0, 0, 0, 0)
+        wh_row.setSpacing(4)
+        self.width_spin = QSpinBox()
+        self.width_spin.setRange(16, 512)
+        self.width_spin.setValue(getattr(self, "_adsr_width", 64))
+        self.width_spin.setFixedWidth(48)
+        self.height_spin = QSpinBox()
+        self.height_spin.setRange(16, 512)
+        self.height_spin.setValue(getattr(self, "_adsr_height", 64))
+        self.height_spin.setFixedWidth(48)
+        wh_row.addStretch()
+        wh_row.addWidget(QLabel("W:"))
+        wh_row.addWidget(self.width_spin)
+        wh_row.addWidget(QLabel("H:"))
+        wh_row.addWidget(self.height_spin)
+        wh_row.addStretch()
+        card_layout.addLayout(wh_row)
+
+        # Real-time update logic for X/Y/W/H
+        def update_geom():
+            self._adsr_x = self.x_spin.value()
+            self._adsr_y = self.y_spin.value()
+            self._adsr_width = self.width_spin.value()
+            self._adsr_height = self.height_spin.value()
+            # Notify parent/main window to update UI
+            if hasattr(self.parent(), "on_adsr_advanced_changed"):
+                self.parent().on_adsr_advanced_changed(self.param_name)
+            elif hasattr(self, "on_advanced_changed"):
+                self.on_advanced_changed(self.param_name)
+        self.x_spin.valueChanged.connect(update_geom)
+        self.y_spin.valueChanged.connect(update_geom)
+        self.width_spin.valueChanged.connect(update_geom)
+        self.height_spin.valueChanged.connect(update_geom)
+
+        # Type selector (if present, centered below value)
         if type_options:
             self.type_combo = QComboBox()
             self.type_combo.addItems(type_options)
-            mid_row.addWidget(QLabel("Type:"))
-            mid_row.addWidget(self.type_combo)
+            type_row = QHBoxLayout()
+            type_row.setContentsMargins(0, 0, 0, 0)
+            type_row.addStretch()
+            type_row.addWidget(self.type_combo)
+            type_row.addStretch()
+            card_layout.addLayout(type_row)
         else:
             self.type_combo = None
-        card_layout.addLayout(mid_row)
 
-        # Settings button
-        bottom_row = QHBoxLayout()
+        # Settings button (centered)
         self.settings_btn = QPushButton("Settings")
         self.settings_btn.setFixedWidth(80)
-        bottom_row.addStretch()
-        bottom_row.addWidget(self.settings_btn)
-        card_layout.addLayout(bottom_row)
+        btn_row = QHBoxLayout()
+        btn_row.setContentsMargins(0, 0, 0, 0)
+        btn_row.addStretch()
+        btn_row.addWidget(self.settings_btn)
+        btn_row.addStretch()
+        card_layout.addLayout(btn_row)
 
+        card_layout.addStretch()
         self.setLayout(card_layout)
+
+        # Optionally: connect label_btn to enable/disable logic or other functionality
+        # Example: self.label_btn.clicked.connect(self.on_label_clicked)
 
         # Advanced options modal
         self.settings_btn.clicked.connect(self.open_advanced_options_dialog)
+
+        # Provide enable_cb-like compatibility for parent logic
+        self.enable_cb = self.label_btn
 
     def open_advanced_options_dialog(self):
         from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QSpinBox, QComboBox, QDoubleSpinBox

@@ -11,20 +11,18 @@ class GroupPropertiesWidget(QWidget):
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(8, 8, 8, 8)
         main_layout.setSpacing(8)
-        # Modular ADSR section
-        adsr_row = QHBoxLayout()
-        adsr_row.setContentsMargins(0, 0, 0, 0)
-        adsr_row.setSpacing(12)
+        # Modular ADSR section (now in a group box for clarity)
+        from PyQt5.QtWidgets import QGroupBox
+        adsr_group = QGroupBox("ADSR Envelope")
+        adsr_group.setStyleSheet("QGroupBox { font-weight: bold; margin-top: 8px; }")
+        adsr_group_layout = QHBoxLayout()
+        adsr_group_layout.setContentsMargins(12, 12, 12, 12)
+        adsr_group_layout.setSpacing(16)
         self.attack_card = ADSRParameterCard("Attack", value=0.0, value_range=(0.0, 10.0), value_step=0.01, value_decimals=3)
         self.decay_card = ADSRParameterCard("Decay", value=0.0, value_range=(0.0, 10.0), value_step=0.01, value_decimals=3)
         self.sustain_card = ADSRParameterCard("Sustain", value=1.0, value_range=(0.0, 1.0), value_step=0.01, value_decimals=3)
         self.release_card = ADSRParameterCard("Release", value=0.0, value_range=(0.0, 10.0), value_step=0.01, value_decimals=3)
-        # Set enable checkboxes to unchecked by default
-        self.attack_card.enable_cb.setChecked(False)
-        self.decay_card.enable_cb.setChecked(False)
-        self.sustain_card.enable_cb.setChecked(False)
-        self.release_card.enable_cb.setChecked(False)
-        # Connect enable checkboxes and advanced changed
+        # Connect toggles and advanced changed
         self.attack_card.enable_cb.toggled.connect(lambda _: self.update_adsr_elements())
         self.decay_card.enable_cb.toggled.connect(lambda _: self.update_adsr_elements())
         self.sustain_card.enable_cb.toggled.connect(lambda _: self.update_adsr_elements())
@@ -33,11 +31,17 @@ class GroupPropertiesWidget(QWidget):
         self.decay_card.on_advanced_changed = lambda _: self.update_adsr_elements()
         self.sustain_card.on_advanced_changed = lambda _: self.update_adsr_elements()
         self.release_card.on_advanced_changed = lambda _: self.update_adsr_elements()
-        adsr_row.addWidget(self.attack_card)
-        adsr_row.addWidget(self.decay_card)
-        adsr_row.addWidget(self.sustain_card)
-        adsr_row.addWidget(self.release_card)
-        main_layout.addLayout(adsr_row)
+        adsr_group_layout.addStretch()
+        adsr_group_layout.addWidget(self.attack_card)
+        adsr_group_layout.addStretch()
+        adsr_group_layout.addWidget(self.decay_card)
+        adsr_group_layout.addStretch()
+        adsr_group_layout.addWidget(self.sustain_card)
+        adsr_group_layout.addStretch()
+        adsr_group_layout.addWidget(self.release_card)
+        adsr_group_layout.addStretch()
+        adsr_group.setLayout(adsr_group_layout)
+        main_layout.addWidget(adsr_group)
 
         # Velocity Map section
         vel_section = QVBoxLayout()
@@ -156,7 +160,6 @@ class GroupPropertiesWidget(QWidget):
         # Add enabled ADSR cards
         for card in [self.attack_card, self.decay_card, self.sustain_card, self.release_card]:
             if card.enable_cb.isChecked():
-                # Build UIElement for DecentSampler export
                 label = card.param_name
                 x = getattr(card, "_adsr_x", 40)
                 y = getattr(card, "_adsr_y", 100)
