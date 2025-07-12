@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import QWidget, QFormLayout, QDoubleSpinBox, QSlider, QHBoxLayout, QSpinBox, QLabel
 from PyQt5.QtCore import Qt
+from views.panels.ui_widgets import ADSRParameterCard
 
 class GroupPropertiesWidget(QWidget):
     def __init__(self, parent=None, main_window=None):
@@ -10,42 +11,33 @@ class GroupPropertiesWidget(QWidget):
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(8, 8, 8, 8)
         main_layout.setSpacing(8)
-        adsr_layout = QFormLayout()
-        adsr_layout.setContentsMargins(0, 0, 0, 0)
-        adsr_layout.setSpacing(8)
-        self.attack_spin = QDoubleSpinBox()
-        self.attack_spin.setRange(0.0, 10.0)
-        self.attack_spin.setSingleStep(0.01)
-        self.attack_spin.setDecimals(3)
-        self.attack_spin.setToolTip("Attack time (seconds)")
-        self.attack_spin.setAccessibleName("Attack SpinBox")
-        self._attack_last = self.attack_spin.value()
-        self.decay_spin = QDoubleSpinBox()
-        self.decay_spin.setRange(0.0, 10.0)
-        self.decay_spin.setSingleStep(0.01)
-        self.decay_spin.setDecimals(3)
-        self.decay_spin.setToolTip("Decay time (seconds)")
-        self.decay_spin.setAccessibleName("Decay SpinBox")
-        self._decay_last = self.decay_spin.value()
-        self.sustain_spin = QDoubleSpinBox()
-        self.sustain_spin.setRange(0.0, 1.0)
-        self.sustain_spin.setSingleStep(0.01)
-        self.sustain_spin.setDecimals(3)
-        self.sustain_spin.setToolTip("Sustain level (0-1)")
-        self.sustain_spin.setAccessibleName("Sustain SpinBox")
-        self._sustain_last = self.sustain_spin.value()
-        self.release_spin = QDoubleSpinBox()
-        self.release_spin.setRange(0.0, 10.0)
-        self.release_spin.setSingleStep(0.01)
-        self.release_spin.setDecimals(3)
-        self.release_spin.setToolTip("Release time (seconds)")
-        self.release_spin.setAccessibleName("Release SpinBox")
-        self._release_last = self.release_spin.value()
-        adsr_layout.addRow("Attack", self.attack_spin)
-        adsr_layout.addRow("Decay", self.decay_spin)
-        adsr_layout.addRow("Sustain", self.sustain_spin)
-        adsr_layout.addRow("Release", self.release_spin)
-        main_layout.addLayout(adsr_layout)
+        # Modular ADSR section
+        adsr_row = QHBoxLayout()
+        adsr_row.setContentsMargins(0, 0, 0, 0)
+        adsr_row.setSpacing(12)
+        self.attack_card = ADSRParameterCard("Attack", value=0.0, value_range=(0.0, 10.0), value_step=0.01, value_decimals=3)
+        self.decay_card = ADSRParameterCard("Decay", value=0.0, value_range=(0.0, 10.0), value_step=0.01, value_decimals=3)
+        self.sustain_card = ADSRParameterCard("Sustain", value=1.0, value_range=(0.0, 1.0), value_step=0.01, value_decimals=3)
+        self.release_card = ADSRParameterCard("Release", value=0.0, value_range=(0.0, 10.0), value_step=0.01, value_decimals=3)
+        # Set enable checkboxes to unchecked by default
+        self.attack_card.enable_cb.setChecked(False)
+        self.decay_card.enable_cb.setChecked(False)
+        self.sustain_card.enable_cb.setChecked(False)
+        self.release_card.enable_cb.setChecked(False)
+        # Connect enable checkboxes and advanced changed
+        self.attack_card.enable_cb.toggled.connect(lambda _: self.update_adsr_elements())
+        self.decay_card.enable_cb.toggled.connect(lambda _: self.update_adsr_elements())
+        self.sustain_card.enable_cb.toggled.connect(lambda _: self.update_adsr_elements())
+        self.release_card.enable_cb.toggled.connect(lambda _: self.update_adsr_elements())
+        self.attack_card.on_advanced_changed = lambda _: self.update_adsr_elements()
+        self.decay_card.on_advanced_changed = lambda _: self.update_adsr_elements()
+        self.sustain_card.on_advanced_changed = lambda _: self.update_adsr_elements()
+        self.release_card.on_advanced_changed = lambda _: self.update_adsr_elements()
+        adsr_row.addWidget(self.attack_card)
+        adsr_row.addWidget(self.decay_card)
+        adsr_row.addWidget(self.sustain_card)
+        adsr_row.addWidget(self.release_card)
+        main_layout.addLayout(adsr_row)
 
         # Velocity Map section
         vel_section = QVBoxLayout()
@@ -121,29 +113,9 @@ class GroupPropertiesWidget(QWidget):
                 cmd = commands.EditPropertyCommand(self, prop, old, new, setter=setter, description=f"Edit {prop}")
                 undo_stack.push(cmd)
 
-        def attack_setter(val): self.attack_spin.setValue(val)
-        def decay_setter(val): self.decay_spin.setValue(val)
-        def sustain_setter(val): self.sustain_spin.setValue(val)
-        def release_setter(val): self.release_spin.setValue(val)
         def lo_vel_setter(val): self.lo_vel_slider.setValue(val)
         def hi_vel_setter(val): self.hi_vel_slider.setValue(val)
 
-        def attack_changed(val):
-            old = self._attack_last
-            push_edit_command("attack", old, val, attack_setter)
-            self._attack_last = val
-        def decay_changed(val):
-            old = self._decay_last
-            push_edit_command("decay", old, val, decay_setter)
-            self._decay_last = val
-        def sustain_changed(val):
-            old = self._sustain_last
-            push_edit_command("sustain", old, val, sustain_setter)
-            self._sustain_last = val
-        def release_changed(val):
-            old = self._release_last
-            push_edit_command("release", old, val, release_setter)
-            self._release_last = val
         def lo_vel_changed(val):
             old = self._lo_vel_last
             push_edit_command("lo_velocity", old, val, lo_vel_setter)
@@ -153,26 +125,122 @@ class GroupPropertiesWidget(QWidget):
             push_edit_command("hi_velocity", old, val, hi_vel_setter)
             self._hi_vel_last = val
 
-        self.attack_spin.valueChanged.connect(attack_changed)
-        self.decay_spin.valueChanged.connect(decay_changed)
-        self.sustain_spin.valueChanged.connect(sustain_changed)
-        self.release_spin.valueChanged.connect(release_changed)
         self.lo_vel_slider.valueChanged.connect(lo_vel_changed)
         self.hi_vel_slider.valueChanged.connect(hi_vel_changed)
 
     def set_adsr(self, attack, decay, sustain, release):
-        self.attack_spin.setValue(attack)
-        self.decay_spin.setValue(decay)
-        self.sustain_spin.setValue(sustain)
-        self.release_spin.setValue(release)
+        self.attack_card.value_spin.setValue(attack)
+        self.decay_card.value_spin.setValue(decay)
+        self.sustain_card.value_spin.setValue(sustain)
+        self.release_card.value_spin.setValue(release)
 
     def get_adsr(self):
         return (
-            self.attack_spin.value(),
-            self.decay_spin.value(),
-            self.sustain_spin.value(),
-            self.release_spin.value()
+            self.attack_card.value_spin.value(),
+            self.decay_card.value_spin.value(),
+            self.sustain_card.value_spin.value(),
+            self.release_card.value_spin.value()
         )
+
+    def update_adsr_elements(self):
+        """
+        Update preset.ui.elements to reflect enabled ADSR cards and their advanced options.
+        """
+        mw = self.main_window
+        if not hasattr(mw, "preset") or not hasattr(mw.preset, "ui") or not hasattr(mw.preset.ui, "elements"):
+            return
+        elements = mw.preset.ui.elements
+        # Remove all existing ADSR elements
+        adsr_names = ["Attack", "Decay", "Sustain", "Release"]
+        elements[:] = [el for el in elements if getattr(el, "label", None) not in adsr_names]
+        # Add enabled ADSR cards
+        for card in [self.attack_card, self.decay_card, self.sustain_card, self.release_card]:
+            if card.enable_cb.isChecked():
+                # Build UIElement for DecentSampler export
+                label = card.param_name
+                x = getattr(card, "_adsr_x", 40)
+                y = getattr(card, "_adsr_y", 100)
+                width = getattr(card, "_adsr_width", 64)
+                height = getattr(card, "_adsr_height", 64)
+                widget_type = getattr(card, "_adsr_type", "Knob")
+                orientation = getattr(card, "_adsr_orientation", "horizontal") if widget_type == "Slider" else None
+                text_size = getattr(card, "_adsr_text_size", 16)
+                value = card.value_spin.value()
+                tag_value = "labeled-slider" if widget_type == "Slider" else "labeled-knob"
+                # DecentSampler-specific: min/max/type per parameter
+                param_map = {
+                    "Attack": ("ENV_ATTACK", 0.0, 10.0),
+                    "Decay": ("ENV_DECAY", 0.0, 25.0),
+                    "Sustain": ("ENV_SUSTAIN", 0.0, 1.0),
+                    "Release": ("ENV_RELEASE", 0.0, 25.0)
+                }
+                param_name, min_val, max_val = param_map[label]
+                # Use float for all ADSR
+                value_type = "float"
+                # Set up UIElement with all required DecentSampler attributes
+                try:
+                    from model import UIElement as RealUIElement
+                    el = RealUIElement(
+                        x=x,
+                        y=y,
+                        width=width,
+                        height=height,
+                        label=label,
+                        skin=None,
+                        tag=tag_value,
+                        widget_type=widget_type,
+                        target=param_name,
+                        min_val=min_val,
+                        max_val=max_val,
+                        bindings=[{
+                            "type": "amp",
+                            "level": "instrument",
+                            "position": "0",
+                            "parameter": param_name
+                        }],
+                        options=[],
+                        midi_cc=None,
+                        orientation=orientation
+                    )
+                except Exception:
+                    el = type("UIElement", (), {})()
+                    el.x = x
+                    el.y = y
+                    el.width = width
+                    el.height = height
+                    el.label = label
+                    el.skin = None
+                    el.tag = tag_value
+                    el.widget_type = widget_type
+                    el.target = param_name
+                    el.min_val = min_val
+                    el.max_val = max_val
+                    el.bindings = [{
+                        "type": "amp",
+                        "level": "instrument",
+                        "position": "0",
+                        "parameter": param_name
+                    }]
+                    el.options = []
+                    el.midi_cc = None
+                    el.orientation = orientation
+                el.text_size = text_size
+                el.value = value
+                el.effect_type = None
+                el.parameter = None
+                el.min = min_val
+                el.max = max_val
+                el.default = value
+                el.type = value_type
+                # Add DecentSampler visual attributes (defaults, can be customized)
+                el.textColor = "FF000000"
+                el.textSize = str(text_size)
+                el.trackForegroundColor = "CC000000"
+                el.trackBackgroundColor = "66999999"
+                elements.append(el)
+        # Update preview
+        if hasattr(mw, "preview_canvas"):
+            mw.preview_canvas.set_preset(mw.preset, "")
 
     def set_velocity_range(self, lo, hi):
         self.lo_vel_slider.setValue(lo)

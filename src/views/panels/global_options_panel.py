@@ -22,19 +22,11 @@ class GlobalOptionsPanel(QWidget):
         self._last_bg_image = ""
 
         # Controls
-        self.attack_cb = QCheckBox("Attack")
-        self.decay_cb = QCheckBox("Decay")
-        self.sustain_cb = QCheckBox("Sustain")
-        self.release_cb = QCheckBox("Release")
         self.tone_cb = QCheckBox("Tone")
         self.chorus_cb = QCheckBox("Chorus")
         self.reverb_cb = QCheckBox("Reverb")
         self.midicc1_cb = QCheckBox("Map Tone to MIDI CC1")
         for cb, name in [
-            (self.attack_cb, "have_attack"),
-            (self.decay_cb, "have_decay"),
-            (self.sustain_cb, "have_sustain"),
-            (self.release_cb, "have_release"),
             (self.tone_cb, "have_tone"),
             (self.chorus_cb, "have_chorus"),
             (self.reverb_cb, "have_reverb"),
@@ -68,10 +60,6 @@ class GlobalOptionsPanel(QWidget):
     def get_options(self):
         return {
             "bg_image": self.bg_edit.text(),
-            "have_attack": self.attack_cb.isChecked(),
-            "have_decay": self.decay_cb.isChecked(),
-            "have_sustain": self.sustain_cb.isChecked(),
-            "have_release": self.release_cb.isChecked(),
             "have_tone": self.tone_cb.isChecked(),
             "have_chorus": self.chorus_cb.isChecked(),
             "have_reverb": self.reverb_cb.isChecked(),

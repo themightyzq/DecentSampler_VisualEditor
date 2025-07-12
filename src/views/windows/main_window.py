@@ -8,6 +8,7 @@ from views.panels.global_options_panel import GlobalOptionsPanel
 from panels.project_properties import ProjectPropertiesPanel
 from views.panels.preview_canvas import PreviewCanvas
 from panels.piano_keyboard import PianoKeyboardWidget
+from panels.group_properties import GroupPropertiesWidget
 from model import InstrumentPreset
 import controller
 import os
@@ -67,6 +68,16 @@ class MainWindow(QMainWindow):
         self.preview_canvas.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.preview_canvas.setFixedSize(812, 375)
         center_layout.addWidget(self.preview_canvas, alignment=Qt.AlignHCenter)
+
+        # Modular ADSR section (centered below canvas, above keyboard)
+        self.group_properties_panel_widget = GroupPropertiesWidget(main_window=self)
+        center_layout.addWidget(self.group_properties_panel_widget, alignment=Qt.AlignHCenter)
+        # Connect ADSR value changes to update method
+        self.group_properties_panel_widget.attack_card.value_spin.valueChanged.connect(self._adsr_update)
+        self.group_properties_panel_widget.decay_card.value_spin.valueChanged.connect(self._adsr_update)
+        self.group_properties_panel_widget.sustain_card.value_spin.valueChanged.connect(self._adsr_update)
+        self.group_properties_panel_widget.release_card.value_spin.valueChanged.connect(self._adsr_update)
+
         self.piano_keyboard = PianoKeyboardWidget(main_window=self)
         self.piano_keyboard.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.piano_keyboard.setMinimumHeight(80)
@@ -142,10 +153,11 @@ class MainWindow(QMainWindow):
         # Update preset from options panel before saving
         opts = self.global_options_panel.get_options()
         self.preset.bg_image = opts["bg_image"]
-        self.preset.have_attack = opts["have_attack"]
-        self.preset.have_decay = opts["have_decay"]
-        self.preset.have_sustain = opts["have_sustain"]
-        self.preset.have_release = opts["have_release"]
+        # Set ADSR flags from modular cards
+        self.preset.have_attack = self.group_properties_panel_widget.attack_card.enable_cb.isChecked()
+        self.preset.have_decay = self.group_properties_panel_widget.decay_card.enable_cb.isChecked()
+        self.preset.have_sustain = self.group_properties_panel_widget.sustain_card.enable_cb.isChecked()
+        self.preset.have_release = self.group_properties_panel_widget.release_card.enable_cb.isChecked()
         self.preset.have_tone = opts["have_tone"]
         self.preset.have_chorus = opts["have_chorus"]
         self.preset.have_reverb = opts["have_reverb"]
