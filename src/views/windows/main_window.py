@@ -25,8 +25,19 @@ class MainWindow(QMainWindow):
         self._create_central()
         self._createGlobalOptionsPanel()
         self._connectSignals()
-        self.new_preset()  # Always start with a blank preset
         self.showMaximized()
+        self.new_preset()  # Always start with a blank preset
+        # Lock properties panel to fixed width and height (non-resizable)
+        fixed_width = 420
+        self.global_options_panel.setMinimumWidth(fixed_width)
+        self.global_options_panel.setMaximumWidth(fixed_width)
+        self.global_options_panel.setFixedWidth(fixed_width)
+        self.global_options_panel.resize(fixed_width, self.global_options_panel.height())
+        self.global_options_panel.setMinimumHeight(self.global_options_panel.height())
+        self.global_options_panel.setMaximumHeight(self.global_options_panel.height())
+        self.global_options_panel.setFixedHeight(self.global_options_panel.height())
+        # Prevent closing, undocking, or moving the properties panel
+        self.global_options_panel.setFeatures(self.global_options_panel.NoDockWidgetFeatures)
 
     def _create_menu(self):
         menubar = self.menuBar()
@@ -59,12 +70,15 @@ class MainWindow(QMainWindow):
         # Left: Sample list + mapping form merged in a vertical layout
         self.sample_mapping_panel = SampleMappingPanel(self)
         left_widget = self.sample_mapping_panel
+        # Prevent closing, undocking, or moving the sample mapping panel if it is a dock widget
+        if hasattr(left_widget, "setFeatures"):
+            left_widget.setFeatures(left_widget.NoDockWidgetFeatures)
 
         # Center: PreviewCanvas (fixed) + PianoKeyboardWidget (fixed height, fixed width, centered)
         center_widget = QWidget()
         center_layout = QVBoxLayout()
-        center_layout.setContentsMargins(8, 8, 8, 8)
-        center_layout.setSpacing(8)
+        center_layout.setContentsMargins(4, 4, 4, 4)
+        center_layout.setSpacing(4)
         self.preview_canvas = PreviewCanvas(self)
         self.preview_canvas.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
         self.preview_canvas.setFixedSize(812, 375)
@@ -72,6 +86,7 @@ class MainWindow(QMainWindow):
 
         # Modular ADSR section (centered below canvas, above keyboard)
         self.group_properties_panel_widget = GroupPropertiesWidget(main_window=self)
+        self.group_properties_panel_widget.setFixedWidth(812)
         center_layout.addWidget(self.group_properties_panel_widget, alignment=Qt.AlignHCenter)
         # Connect ADSR value changes to update method
         self.group_properties_panel_widget.attack_card.value_spin.valueChanged.connect(self._adsr_update)
@@ -111,6 +126,10 @@ class MainWindow(QMainWindow):
             show_error(self, "Panel init failed", str(e))
             raise
         self.addDockWidget(Qt.RightDockWidgetArea, self.global_options_panel)
+        # Set the properties panel to its compact max width on startup
+        self.global_options_panel.setMinimumWidth(500)
+        self.global_options_panel.setMaximumWidth(500)
+        self.global_options_panel.resize(500, self.global_options_panel.height())
 
     def _connectSignals(self):
         # Placeholder for future signal connections
