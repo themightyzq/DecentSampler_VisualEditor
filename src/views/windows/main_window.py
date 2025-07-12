@@ -26,6 +26,7 @@ class MainWindow(QMainWindow):
         self._createGlobalOptionsPanel()
         self._connectSignals()
         self.new_preset()  # Always start with a blank preset
+        self.showMaximized()
 
     def _create_menu(self):
         menubar = self.menuBar()
