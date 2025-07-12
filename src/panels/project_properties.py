@@ -33,6 +33,7 @@ class AddControlDialog(QDialog):
 
         # Label
         self.label_edit = QLineEdit()
+        self.label_edit.setMaxLength(12)
         self.form_layout.addRow("Label:", self.label_edit)
 
         # Effect type dropdown
@@ -256,10 +257,9 @@ class ProjectPropertiesPanel(QDockWidget):
 
         # Controls sub-panel: widget type selectors for each effect
         controls_group = QGroupBox("Effects Controls")
-        self.controls_layout = QGridLayout()
+        self.controls_layout = QVBoxLayout()
         self.controls_layout.setContentsMargins(0, 0, 0, 0)
-        self.controls_layout.setHorizontalSpacing(8)
-        self.controls_layout.setVerticalSpacing(8)
+        self.controls_layout.setSpacing(0)
         controls_group.setLayout(self.controls_layout)
         form_layout.addRow(controls_group)
 
@@ -294,12 +294,20 @@ class ProjectPropertiesPanel(QDockWidget):
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
-        # Add the "Add Control" button, centered/aligned
-        self.add_control_btn = QPushButton("Add Control")
-        self.add_control_btn.setMinimumHeight(40)
-        self.add_control_btn.setStyleSheet("font-size: 16px;")
-        self.add_control_btn.clicked.connect(self._open_add_control_modal)
-        self.controls_layout.addWidget(self.add_control_btn, 0, 0, 1, -1, alignment=Qt.AlignCenter)
+
+        # Header row
+        header_row = QWidget()
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(8, 0, 8, 0)
+        header_layout.setSpacing(8)
+        header_labels = ["Label", "X", "Y", "Width", "Height", "Edit"]
+        for text in header_labels:
+            lbl = QLabel(text)
+            lbl.setStyleSheet("font-weight: bold;")
+            lbl.setAlignment(Qt.AlignCenter)
+            header_layout.addWidget(lbl)
+        header_row.setLayout(header_layout)
+        self.controls_layout.addWidget(header_row)
 
         # Add a row for each control element
         mw = self.parent()
@@ -307,63 +315,105 @@ class ProjectPropertiesPanel(QDockWidget):
             for idx, el in enumerate(mw.preset.ui.elements):
                 row_widget = QWidget()
                 row_layout = QHBoxLayout()
-                row_layout.setContentsMargins(0, 0, 0, 0)
-                row_layout.setSpacing(6)
-                # Enable/disable checkbox
-                enable_checkbox = QCheckBox()
-                is_enabled = getattr(el, "enabled", True)
-                enable_checkbox.setChecked(is_enabled)
-                enable_checkbox.stateChanged.connect(lambda state, i=idx: self._toggle_control_enabled(i, state))
-                row_layout.addWidget(enable_checkbox)
-                # Label
-                row_layout.addWidget(QLabel(str(getattr(el, "label", ""))))
+                row_layout.setContentsMargins(8, 2, 8, 2)
+                row_layout.setSpacing(8)
+                row_widget.setStyleSheet("""
+                    background: #f7f7fa;
+                    border: 1px solid #e0e0e0;
+                """)
+
+                # Label (not editable here, truncated to 12 chars with ellipsis)
+                label_val = str(getattr(el, "label", ""))
+                if len(label_val) > 12:
+                    label_val = label_val[:9] + "..."
+                label_widget = QLabel(label_val)
+                label_widget.setMinimumWidth(100)
+                label_widget.setMaximumWidth(120)
+                label_widget.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+                row_layout.addWidget(label_widget)
 
                 # X position (editable)
                 x_spin = QSpinBox()
-                x_spin.setRange(0, 2000)
+                x_spin.setRange(0, 812)
                 x_spin.setValue(getattr(el, "x", 0))
+                x_spin.setMinimumWidth(48)
+                x_spin.setMaximumWidth(56)
+                x_spin.setAlignment(Qt.AlignVCenter)
                 x_spin.valueChanged.connect(lambda value, i=idx: self._update_control_property(i, "x", value))
-                row_layout.addWidget(QLabel("X:"))
                 row_layout.addWidget(x_spin)
 
                 # Y position (editable)
                 y_spin = QSpinBox()
-                y_spin.setRange(0, 2000)
+                y_spin.setRange(0, 812)
                 y_spin.setValue(getattr(el, "y", 0))
+                y_spin.setMinimumWidth(48)
+                y_spin.setMaximumWidth(56)
+                y_spin.setAlignment(Qt.AlignVCenter)
                 y_spin.valueChanged.connect(lambda value, i=idx: self._update_control_property(i, "y", value))
-                row_layout.addWidget(QLabel("Y:"))
                 row_layout.addWidget(y_spin)
 
                 # Width (editable)
                 width_spin = QSpinBox()
-                width_spin.setRange(16, 512)
+                width_spin.setRange(16, 812)
                 width_spin.setValue(getattr(el, "width", 64))
+                width_spin.setMinimumWidth(48)
+                width_spin.setMaximumWidth(56)
+                width_spin.setAlignment(Qt.AlignVCenter)
                 width_spin.valueChanged.connect(lambda value, i=idx: self._update_control_property(i, "width", value))
-                row_layout.addWidget(QLabel("W:"))
                 row_layout.addWidget(width_spin)
 
                 # Height (editable)
                 height_spin = QSpinBox()
-                height_spin.setRange(16, 512)
+                height_spin.setRange(16, 812)
                 height_spin.setValue(getattr(el, "height", 64))
+                height_spin.setMinimumWidth(48)
+                height_spin.setMaximumWidth(56)
+                height_spin.setAlignment(Qt.AlignVCenter)
                 height_spin.valueChanged.connect(lambda value, i=idx: self._update_control_property(i, "height", value))
-                row_layout.addWidget(QLabel("H:"))
                 row_layout.addWidget(height_spin)
 
-                # Edit icon
-                edit_btn = QPushButton("✎")
-                edit_btn.setFixedWidth(28)
+                # Edit and Remove buttons (truly square, E/X centered, 4px margin)
+                edit_btn = QPushButton("E")
+                edit_btn.setFixedSize(28, 28)
                 edit_btn.setToolTip("Edit")
+                edit_btn.setStyleSheet("""
+                    font-size: 16px; font-weight: bold; text-align: center;
+                    background: #e6eaff;
+                """)
                 edit_btn.clicked.connect(lambda _, i=idx: self._edit_control(i))
-                row_layout.addWidget(edit_btn)
-                # Delete icon
-                del_btn = QPushButton("🗑")
-                del_btn.setFixedWidth(28)
+                del_btn = QPushButton("✖")
+                del_btn.setFixedSize(28, 28)
                 del_btn.setToolTip("Delete")
+                del_btn.setStyleSheet("""
+                    font-size: 16px; font-weight: bold; text-align: center;
+                    background: #ffeaea;
+                    margin-left: 4px;
+                """)
                 del_btn.clicked.connect(lambda _, i=idx: self._delete_control(i))
-                row_layout.addWidget(del_btn)
+                btns_widget = QWidget()
+                btns_layout = QHBoxLayout()
+                btns_layout.setContentsMargins(0, 0, 0, 0)
+                btns_layout.setSpacing(4)
+                btns_layout.addWidget(edit_btn)
+                btns_layout.addWidget(del_btn)
+                btns_widget.setLayout(btns_layout)
+                btns_widget.setMaximumWidth(68)
+                btns_widget.setMinimumWidth(60)
+                row_layout.addWidget(btns_widget)
+
                 row_widget.setLayout(row_layout)
-                self.controls_layout.addWidget(row_widget, idx + 1, 0, 1, -1)
+                self.controls_layout.addWidget(row_widget)
+
+        # Add vertical spacing (24px) before the "Add Control" button
+        self.controls_layout.addSpacing(24)
+        self.add_control_btn = QPushButton("Add Control")
+        self.add_control_btn.setMinimumHeight(28)
+        self.add_control_btn.setStyleSheet("font-size: 13px;")
+        self.add_control_btn.clicked.connect(self._open_add_control_modal)
+        self.controls_layout.addWidget(self.add_control_btn)
+        # Set the properties panel width to a compact value
+        self.setMinimumWidth(380)
+        self.setMaximumWidth(420)
 
     def _update_control_property(self, idx, prop, value):
         mw = self.parent()
