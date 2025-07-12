@@ -312,7 +312,12 @@ class ProjectPropertiesPanel(QDockWidget):
         # Add a row for each control element
         mw = self.parent()
         if hasattr(mw, "preset") and hasattr(mw.preset, "ui") and hasattr(mw.preset.ui, "elements"):
-            for idx, el in enumerate(mw.preset.ui.elements):
+            # Exclude ADSR controls from the populated control element list
+            filtered_elements = [
+                el for el in mw.preset.ui.elements
+                if str(getattr(el, "label", "")).lower() not in ["attack", "decay", "sustain", "release"]
+            ]
+            for idx, el in enumerate(filtered_elements):
                 row_widget = QWidget()
                 row_layout = QHBoxLayout()
                 row_layout.setContentsMargins(8, 2, 8, 2)
