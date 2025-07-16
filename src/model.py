@@ -3,17 +3,42 @@ from typing import List, Optional
 from utils.effects_catalog import EFFECTS_CATALOG
 
 class SampleZone:
-    def __init__(self, path: str, rootNote: int, loNote: int, hiNote: int, velocityRange=(0, 127)):
+    def __init__(self, path: str, rootNote: int, loNote: int, hiNote: int, velocityRange=(0, 127),
+                 seqMode="round_robin", seqPosition=1, volume=0.0, pan=0.0, tune=0.0,
+                 start=0, end=None, loopEnabled=False, loopStart=None, loopEnd=None, 
+                 loopCrossfade=0.0, loopMode="forward", tags=None):
         self.path = path
         self.rootNote = rootNote
         self.loNote = loNote
         self.hiNote = hiNote
         self.velocityRange = velocityRange
+        
+        # Advanced sampling attributes
+        self.seqMode = seqMode  # "round_robin", "random", "true_random", "always"
+        self.seqPosition = seqPosition  # Position in round-robin sequence
+        self.volume = volume  # Volume offset in dB
+        self.pan = pan  # Pan position (-1.0 to 1.0)
+        self.tune = tune  # Tune offset in cents
+        
+        # Sample playback range
+        self.start = start  # Start sample offset
+        self.end = end  # End sample offset (None = end of file)
+        
+        # Loop settings
+        self.loopEnabled = loopEnabled
+        self.loopStart = loopStart  # Loop start point
+        self.loopEnd = loopEnd  # Loop end point  
+        self.loopCrossfade = loopCrossfade  # Crossfade amount in seconds
+        self.loopMode = loopMode  # "forward", "backward", "bidirectional"
+        
+        # Sample tags for blending and organization
+        self.tags = tags or []  # List of tags for this sample
 
     def __repr__(self):
         return (
             f"SampleZone(path={self.path!r}, rootNote={self.rootNote}, "
-            f"loNote={self.loNote}, hiNote={self.hiNote}, velocityRange={self.velocityRange})"
+            f"loNote={self.loNote}, hiNote={self.hiNote}, velocityRange={self.velocityRange}, "
+            f"seqMode={self.seqMode}, seqPosition={self.seqPosition})"
         )
 
 class SampleManager:
@@ -58,8 +83,40 @@ class GroupEnvelope:
         self.sustain = sustain
         self.release = release
 
+class LFO:
+    def __init__(self, name: str, frequency: float = 1.0, waveform: str = "sine", 
+                 amplitude: float = 1.0, offset: float = 0.0, phase: float = 0.0,
+                 sync: str = "free", sync_length: str = "1", retrigger: bool = False):
+        self.name = name
+        self.frequency = frequency
+        self.waveform = waveform  # sine, triangle, sawtooth, square, s&h, envelope_follower
+        self.amplitude = amplitude
+        self.offset = offset
+        self.phase = phase
+        self.sync = sync  # free, tempo
+        self.sync_length = sync_length  # 1/64, 1/32, 1/16, 1/8, 1/4, 1/2, 1, 2, 4, 8, 16
+        self.retrigger = retrigger
+
+class ModulatorTarget:
+    def __init__(self, target_type: str, parameter: str, level: str = "instrument", 
+                 position: int = 0, group_index: int = None, effect_index: int = None):
+        self.target_type = target_type  # amp, effect, general, etc.
+        self.parameter = parameter      # ENV_ATTACK, FX_MIX, etc.
+        self.level = level             # instrument, group, tag
+        self.position = position       # position for instrument level
+        self.group_index = group_index # for group level
+        self.effect_index = effect_index # for effect targeting
+
+class ModulationRoute:
+    def __init__(self, modulator_name: str, target: ModulatorTarget, 
+                 amount: float = 1.0, invert: bool = False):
+        self.modulator_name = modulator_name
+        self.target = target
+        self.amount = amount
+        self.invert = invert
+
 class UIElement:
-    def __init__(self, x, y, width, height, label, skin=None, tag=None, widget_type=None, target=None, min_val=None, max_val=None, bindings=None, options=None, midi_cc=None, orientation=None):
+    def __init__(self, x, y, width, height, label, skin=None, tag=None, widget_type=None, target=None, min_val=None, max_val=None, bindings=None, options=None, midi_cc=None, orientation=None, color_ranges=None):
         self.x = x
         self.y = y
         self.width = width
@@ -75,6 +132,7 @@ class UIElement:
         self.options = options if options is not None else []     # For menu: list of option objects
         self.midi_cc = midi_cc
         self.orientation = orientation
+        self.color_ranges = color_ranges if color_ranges is not None else []  # For keyboard widget
 
 class InstrumentPreset:
     def __init__(
@@ -103,7 +161,10 @@ class InstrumentPreset:
         envelope: Optional[GroupEnvelope] = None,
         effects: Optional[dict] = None,  # New: effect parameter values
         advanced_mode: bool = False,     # New: simple/advanced toggle
-        sample_manager: Optional[SampleManager] = None
+        sample_manager: Optional[SampleManager] = None,
+        lfos: Optional[List[LFO]] = None,
+        modulation_routes: Optional[List[ModulationRoute]] = None,
+        sample_groups: Optional[List] = None
     ):
         self.name = name
         self.ui_width = ui_width
@@ -131,6 +192,9 @@ class InstrumentPreset:
         self.envelope = envelope if envelope is not None else GroupEnvelope()
         self.effects = effects if effects is not None else {}  # {effect_name: {param: value, ...}}
         self.advanced_mode = advanced_mode
+        self.lfos = lfos if lfos is not None else []
+        self.modulation_routes = modulation_routes if modulation_routes is not None else []
+        self.sample_groups = sample_groups if sample_groups is not None else []
 
     @staticmethod
     def from_dspreset(path: str) -> "InstrumentPreset":
@@ -151,7 +215,32 @@ class InstrumentPreset:
         no_attack = ui_elem is not None and ui_elem.attrib.get("noAttack", "false").lower() == "true"
         no_decay = ui_elem is not None and ui_elem.attrib.get("noDecay", "false").lower() == "true"
         ui_elements = []
+        keyboard_color_ranges = []
         if ui_elem is not None:
+            # Parse keyboard color ranges
+            keyboard_elem = ui_elem.find("keyboard")
+            if keyboard_elem is not None:
+                # Define KeyboardColorRange here to avoid circular imports
+                class KeyboardColorRange:
+                    def __init__(self, lo_note=0, hi_note=127, color="FF444444", pressed_color="FF888888"):
+                        self.lo_note = lo_note
+                        self.hi_note = hi_note
+                        self.color = color
+                        self.pressed_color = pressed_color
+                        
+                for color_elem in keyboard_elem.findall("color"):
+                    lo_note = int(color_elem.attrib.get("loNote", 0))
+                    hi_note = int(color_elem.attrib.get("hiNote", 127))
+                    color = color_elem.attrib.get("color", "FF444444")
+                    pressed_color = color_elem.attrib.get("pressedColor", "FF888888")
+                    keyboard_color_ranges.append(KeyboardColorRange(lo_note, hi_note, color, pressed_color))
+                
+                # Add keyboard as UI element
+                ui_elements.append(UIElement(
+                    0, 0, 812, 60, "Keyboard", None, "keyboard", "keyboard", 
+                    color_ranges=keyboard_color_ranges
+                ))
+            
             for tab in ui_elem.findall("tab"):
                 for el in tab:
                     x = int(el.attrib.get("x", 0))
@@ -165,6 +254,46 @@ class InstrumentPreset:
                     ui_elements.append(UIElement(x, y, w, h, label, skin, tag, widget_type))
         mappings = []
         envelope = GroupEnvelope()
+        lfos = []
+        modulation_routes = []
+        
+        # Load modulators
+        modulators_elem = root.find(".//modulators")
+        if modulators_elem is not None:
+            for lfo_elem in modulators_elem.findall("lfo"):
+                lfo_name = lfo_elem.attrib.get("name", "LFO")
+                frequency = float(lfo_elem.attrib.get("frequency", 1.0))
+                waveform = lfo_elem.attrib.get("waveform", "sine")
+                amplitude = float(lfo_elem.attrib.get("amplitude", 1.0))
+                offset = float(lfo_elem.attrib.get("offset", 0.0))
+                phase = float(lfo_elem.attrib.get("phase", 0.0))
+                sync = lfo_elem.attrib.get("sync", "free")
+                sync_length = lfo_elem.attrib.get("syncLength", "1")
+                retrigger = lfo_elem.attrib.get("retrigger", "false").lower() == "true"
+                
+                lfo = LFO(lfo_name, frequency, waveform, amplitude, offset, phase, sync, sync_length, retrigger)
+                lfos.append(lfo)
+                
+                # Load modulation routes for this LFO
+                for binding in lfo_elem.findall("binding"):
+                    target_type = binding.attrib.get("type", "amp")
+                    parameter = binding.attrib.get("parameter", "")
+                    level = binding.attrib.get("level", "instrument")
+                    position = int(binding.attrib.get("position", 0))
+                    group_index = binding.attrib.get("groupIndex")
+                    effect_index = binding.attrib.get("effectIndex")
+                    amount = float(binding.attrib.get("amount", 1.0))
+                    invert = binding.attrib.get("invert", "false").lower() == "true"
+                    
+                    if group_index is not None:
+                        group_index = int(group_index)
+                    if effect_index is not None:
+                        effect_index = int(effect_index)
+                    
+                    target = ModulatorTarget(target_type, parameter, level, position, group_index, effect_index)
+                    route = ModulationRoute(lfo_name, target, amount, invert)
+                    modulation_routes.append(route)
+        
         groups_elem = root.find(".//groups")
         if groups_elem is not None:
             for group in groups_elem.findall("group"):
@@ -179,6 +308,46 @@ class InstrumentPreset:
                     lo = int(sample.attrib.get("loNote", 0))
                     hi = int(sample.attrib.get("hiNote", 127))
                     root_note = int(sample.attrib.get("rootNote", 60))
+                    
+                    # Parse velocity range if present
+                    velocity_range = (0, 127)
+                    if "velocityRange" in sample.attrib:
+                        vel_str = sample.attrib["velocityRange"]
+                        if "," in vel_str:
+                            vel_low, vel_high = map(int, vel_str.split(","))
+                            velocity_range = (vel_low, vel_high)
+                    
+                    # Parse advanced attributes
+                    seq_mode = sample.attrib.get("seqMode", "round_robin")
+                    seq_position = int(sample.attrib.get("seqPosition", 1))
+                    volume = float(sample.attrib.get("volume", 0.0))
+                    pan = float(sample.attrib.get("pan", 0.0))
+                    tune = float(sample.attrib.get("tune", 0.0))
+                    start = int(sample.attrib.get("start", 0))
+                    end = sample.attrib.get("end")
+                    if end is not None:
+                        end = int(end)
+                    
+                    # Parse loop attributes
+                    loop_enabled = sample.attrib.get("loopEnabled", "false").lower() == "true"
+                    loop_start = sample.attrib.get("loopStart")
+                    loop_end = sample.attrib.get("loopEnd")
+                    loop_crossfade = float(sample.attrib.get("loopCrossfade", 0.0))
+                    loop_mode = sample.attrib.get("loopMode", "forward")
+                    
+                    if loop_start is not None:
+                        loop_start = int(loop_start)
+                    if loop_end is not None:
+                        loop_end = int(loop_end)
+                    
+                    # Create enhanced sample zone
+                    zone = SampleZone(
+                        sample_path, root_note, lo, hi, velocity_range,
+                        seq_mode, seq_position, volume, pan, tune,
+                        start, end, loop_enabled, loop_start, loop_end,
+                        loop_crossfade, loop_mode
+                    )
+                    
                     mappings.append(SampleMapping(sample_path, lo, hi, root_note))
         # Effects loading (basic, can be extended for full param support)
         effects_elem = root.find(".//effects")
@@ -196,7 +365,7 @@ class InstrumentPreset:
             name, ui_width, ui_height, bg_image, layout_mode, bg_mode, mappings,
             have_reverb=have_reverb, have_tone=have_tone, have_chorus=have_chorus, have_midicc1=have_midicc1,
             no_attack=no_attack, no_decay=no_decay, ui_elements=ui_elements, envelope=envelope,
-            effects=effects
+            effects=effects, lfos=lfos, modulation_routes=modulation_routes
         )
 
     def auto_map(self, folder_path: str):
@@ -429,9 +598,57 @@ class InstrumentPreset:
                 knob_elem = ET.SubElement(tab_elem, "labeled-knob", knob_attribs)
                 for binding in getattr(el, "bindings", []):
                     ET.SubElement(knob_elem, "binding", {k: str(v) for k, v in binding.items() if v is not None})
+        
+        # Add keyboard widget if present
+        keyboard_elements = [el for el in getattr(self.ui, "elements", []) if getattr(el, "tag", None) == "keyboard"]
+        if keyboard_elements:
+            keyboard_elem = ET.SubElement(ui_elem, "keyboard")
+            keyboard_config = keyboard_elements[0]
+            
+            # Add color ranges
+            for color_range in getattr(keyboard_config, "color_ranges", []):
+                color_attribs = {
+                    "loNote": str(color_range.lo_note),
+                    "hiNote": str(color_range.hi_note),
+                    "color": color_range.color,
+                    "pressedColor": color_range.pressed_color
+                }
+                ET.SubElement(keyboard_elem, "color", color_attribs)
         # Write <modulators> section as direct child of <DecentSampler>
-        # Only write <modulators> for actual LFOs/envelopes, not for UI controls
-        # (No-op for now; add LFO/envelope support here if needed)
+        if self.lfos:
+            modulators_elem = ET.SubElement(root, "modulators")
+            for lfo in self.lfos:
+                lfo_attribs = {
+                    "name": lfo.name,
+                    "frequency": str(lfo.frequency),
+                    "waveform": lfo.waveform,
+                    "amplitude": str(lfo.amplitude),
+                    "offset": str(lfo.offset),
+                    "phase": str(lfo.phase),
+                    "sync": lfo.sync,
+                    "syncLength": lfo.sync_length,
+                    "retrigger": str(lfo.retrigger).lower()
+                }
+                lfo_elem = ET.SubElement(modulators_elem, "lfo", lfo_attribs)
+                
+                # Add modulation routes for this LFO
+                lfo_routes = [route for route in self.modulation_routes if route.modulator_name == lfo.name]
+                for route in lfo_routes:
+                    binding_attribs = {
+                        "type": route.target.target_type,
+                        "parameter": route.target.parameter,
+                        "level": route.target.level,
+                        "position": str(route.target.position),
+                        "amount": str(route.amount)
+                    }
+                    if route.target.group_index is not None:
+                        binding_attribs["groupIndex"] = str(route.target.group_index)
+                    if route.target.effect_index is not None:
+                        binding_attribs["effectIndex"] = str(route.target.effect_index)
+                    if route.invert:
+                        binding_attribs["invert"] = "true"
+                    
+                    ET.SubElement(lfo_elem, "binding", binding_attribs)
         # Write <effects> section with all effects referenced by UI controls
         effects_elem = ET.SubElement(root, "effects")
         # Collect all effect controls and their parameters
@@ -463,62 +680,153 @@ class InstrumentPreset:
             "volume": "-3dB"
         })
         import os
-        # Prefer zones from SampleManager if available, else fallback to mappings
-        zones = self.sample_manager.get_zones() if self.sample_manager and self.sample_manager.get_zones() else [
-            SampleZone(m.path, m.root, m.lo, m.hi) for m in self.mappings
-        ]
         import shutil
         samples_dir = os.path.join(os.path.dirname(path), "samples")
         os.makedirs(samples_dir, exist_ok=True)
         used_filenames = set()
-        for zone in zones:
-            orig_path = zone.path
-            if not os.path.isfile(orig_path):
-                raise Exception(f"Sample file not found: {orig_path}")
-            # Always use just the basename for the sample in the export
-            base_filename = os.path.basename(orig_path)
-            # Ensure no filename collisions
-            unique_filename = base_filename
-            i = 1
-            while unique_filename in used_filenames:
-                name, ext = os.path.splitext(base_filename)
-                unique_filename = f"{name}_{i}{ext}"
-                i += 1
-            used_filenames.add(unique_filename)
-            dest_path = os.path.join(samples_dir, unique_filename)
-            xml_rel_path = os.path.join("samples", unique_filename)
-            # Copy the file if not already present or if source is newer
-            if not os.path.exists(dest_path) or os.path.getmtime(orig_path) > os.path.getmtime(dest_path):
-                shutil.copy2(orig_path, dest_path)
-            xml_rel_path = xml_rel_path.replace("\\", "/")
-            group_elem = ET.SubElement(groups_elem, "group", {
-                "enabled": "true"
-            })
-            if self.cut_all_by_all:
-                group_elem.set("tags", "cutgroup0")
-                group_elem.set("silencedByTags", "cutgroup0")
-                group_elem.set("silencingMode", self.silencing_mode)
-            sample_attribs = {
-                "path": xml_rel_path,
-                "rootNote": str(zone.rootNote),
-                "loNote": str(zone.loNote),
-                "hiNote": str(zone.hiNote)
-            }
-            # Optionally add velocityRange if not default
-            if hasattr(zone, "velocityRange") and zone.velocityRange != (0, 127):
-                sample_attribs["velocityRange"] = f"{zone.velocityRange[0]},{zone.velocityRange[1]}"
-            ET.SubElement(group_elem, "sample", sample_attribs)
-            # Add <envelope> if any envelope controls are present
-            env_controls = {el.target for el in getattr(self.ui, "elements", []) if getattr(el, "target", None) in ("ENV_ATTACK", "ENV_DECAY", "ENV_SUSTAIN", "ENV_RELEASE")}
-            if env_controls:
-                env_attribs = {
-                    "attack": str(getattr(self.envelope, "attack", 0.01)),
-                    "decay": str(getattr(self.envelope, "decay", 1.0)),
-                    "sustain": str(getattr(self.envelope, "sustain", 1.0)),
-                    "release": str(getattr(self.envelope, "release", 0.43)),
-                }
-                ET.SubElement(group_elem, "envelope", env_attribs)
-
+        
+        # Handle proper sample groups if they exist
+        if hasattr(self, 'sample_groups') and self.sample_groups:
+            # Export organized sample groups
+            for group in self.sample_groups:
+                if not group.samples:
+                    continue  # Skip empty groups
+                    
+                group_attribs = {"enabled": str(group.enabled).lower()}
+                
+                # Add group-level attributes
+                if group.volume != 0.0:
+                    group_attribs["volume"] = f"{group.volume}dB"
+                if group.pan != 0.0:
+                    group_attribs["pan"] = str(group.pan)
+                
+                # Add tags if present
+                if group.tags:
+                    group_attribs["tags"] = ",".join(group.tags)
+                
+                # Add group-level envelope if present
+                if any(x is not None for x in [group.attack, group.decay, group.sustain, group.release]):
+                    if group.attack is not None:
+                        group_attribs["attack"] = str(group.attack)
+                    if group.decay is not None:
+                        group_attribs["decay"] = str(group.decay)
+                    if group.sustain is not None:
+                        group_attribs["sustain"] = str(group.sustain)
+                    if group.release is not None:
+                        group_attribs["release"] = str(group.release)
+                
+                if self.cut_all_by_all:
+                    group_attribs["tags"] = "cutgroup0"
+                    group_attribs["silencedByTags"] = "cutgroup0"
+                    group_attribs["silencingMode"] = self.silencing_mode
+                
+                group_elem = ET.SubElement(groups_elem, "group", group_attribs)
+                
+                # Add all samples in this group
+                for zone in group.samples:
+                    self._export_sample_to_group(zone, group_elem, samples_dir, used_filenames, path)
+        else:
+            # Fallback: create individual groups for each sample (legacy behavior)
+            zones = self.sample_manager.get_zones() if self.sample_manager and self.sample_manager.get_zones() else [
+                SampleZone(m.path, m.root, m.lo, m.hi) for m in self.mappings
+            ]
+            for zone in zones:
+                group_elem = ET.SubElement(groups_elem, "group", {
+                    "enabled": "true"
+                })
+                if self.cut_all_by_all:
+                    group_elem.set("tags", "cutgroup0")
+                    group_elem.set("silencedByTags", "cutgroup0")
+                    group_elem.set("silencingMode", self.silencing_mode)
+                self._export_sample_to_group(zone, group_elem, samples_dir, used_filenames, path)
+        
+        # Write modulator mapping and text display to XML tree, after groups section
+        self._write_modulators_to_xml(root, control_name_map)
+        
+        # Pretty-print XML using minidom
+        import xml.dom.minidom
+        rough_string = ET.tostring(root, encoding="utf-8")
+        reparsed = xml.dom.minidom.parseString(rough_string)
+        pretty_xml = reparsed.toprettyxml(indent="  ", encoding="utf-8")
+        with open(path, "wb") as f:
+            f.write(pretty_xml)
+    
+    def _export_sample_to_group(self, zone, group_elem, samples_dir, used_filenames, preset_path):
+        """Export a single sample to a group element"""
+        import os
+        import shutil
+        
+        orig_path = zone.path
+        if not os.path.isfile(orig_path):
+            raise Exception(f"Sample file not found: {orig_path}")
+        
+        # Always use just the basename for the sample in the export
+        base_filename = os.path.basename(orig_path)
+        # Ensure no filename collisions
+        unique_filename = base_filename
+        i = 1
+        while unique_filename in used_filenames:
+            name, ext = os.path.splitext(base_filename)
+            unique_filename = f"{name}_{i}{ext}"
+            i += 1
+        used_filenames.add(unique_filename)
+        
+        dest_path = os.path.join(samples_dir, unique_filename)
+        xml_rel_path = os.path.join("samples", unique_filename)
+        
+        # Copy the file if not already present or if source is newer
+        if not os.path.exists(dest_path) or os.path.getmtime(orig_path) > os.path.getmtime(dest_path):
+            shutil.copy2(orig_path, dest_path)
+        
+        xml_rel_path = xml_rel_path.replace("\\", "/")
+        
+        sample_attribs = {
+            "path": xml_rel_path,
+            "rootNote": str(zone.rootNote),
+            "loNote": str(zone.loNote),
+            "hiNote": str(zone.hiNote)
+        }
+        
+        # Add velocity range if not default
+        if hasattr(zone, "velocityRange") and zone.velocityRange != (0, 127):
+            sample_attribs["velocityRange"] = f"{zone.velocityRange[0]},{zone.velocityRange[1]}"
+        
+        # Add sample tags if present
+        if hasattr(zone, "tags") and zone.tags:
+            sample_attribs["tags"] = ",".join(zone.tags)
+        
+        # Add advanced sampling attributes if not default
+        if hasattr(zone, "seqMode") and zone.seqMode != "round_robin":
+            sample_attribs["seqMode"] = zone.seqMode
+        if hasattr(zone, "seqPosition") and zone.seqPosition != 1:
+            sample_attribs["seqPosition"] = str(zone.seqPosition)
+        if hasattr(zone, "volume") and zone.volume != 0.0:
+            sample_attribs["volume"] = str(zone.volume)
+        if hasattr(zone, "pan") and zone.pan != 0.0:
+            sample_attribs["pan"] = str(zone.pan)
+        if hasattr(zone, "tune") and zone.tune != 0.0:
+            sample_attribs["tune"] = str(zone.tune)
+        if hasattr(zone, "start") and zone.start != 0:
+            sample_attribs["start"] = str(zone.start)
+        if hasattr(zone, "end") and zone.end is not None:
+            sample_attribs["end"] = str(zone.end)
+        
+        # Add loop attributes if enabled
+        if hasattr(zone, "loopEnabled") and zone.loopEnabled:
+            sample_attribs["loopEnabled"] = "true"
+            if hasattr(zone, "loopStart") and zone.loopStart is not None:
+                sample_attribs["loopStart"] = str(zone.loopStart)
+            if hasattr(zone, "loopEnd") and zone.loopEnd is not None:
+                sample_attribs["loopEnd"] = str(zone.loopEnd)
+            if hasattr(zone, "loopCrossfade") and zone.loopCrossfade != 0.0:
+                sample_attribs["loopCrossfade"] = str(zone.loopCrossfade)
+            if hasattr(zone, "loopMode") and zone.loopMode != "forward":
+                sample_attribs["loopMode"] = zone.loopMode
+        
+        ET.SubElement(group_elem, "sample", sample_attribs)
+    
+    def _write_modulators_to_xml(self, root, control_name_map):
+        """Write modulator sections to XML"""
         # MIDI CC mapping for controls with midi_cc set
         midi_controls = [el for el in getattr(self.ui, "elements", []) if getattr(el, "midi_cc", None) is not None]
         if midi_controls:
@@ -575,11 +883,3 @@ class InstrumentPreset:
                 "cutoff": "20000",
                 "resonance": "0.1"
             })
-
-        # Pretty-print XML using minidom
-        import xml.dom.minidom
-        rough_string = ET.tostring(root, encoding="utf-8")
-        reparsed = xml.dom.minidom.parseString(rough_string)
-        pretty_xml = reparsed.toprettyxml(indent="  ", encoding="utf-8")
-        with open(path, "wb") as f:
-            f.write(pretty_xml)

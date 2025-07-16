@@ -1,0 +1,115 @@
+<?xml version='1.0' encoding='utf-8'?>
+<DecentSampler minVersion="1.0.2" presetName="Broken Piano Poop">
+  <ui width="812" height="375" layoutMode="relative" bgMode="top_left" bgImage="background.png">
+    <tab name="main">
+
+      
+      <label x="40" y="55" width="50" height="20" text="Gain" textColor="FFFFFFFF" textSize="14" hAlign="center" />
+      <control x="50" y="75" width="30" height="90" parameterName="Gain" style="linear_vertical" minValue="0" maxValue="1" value="0.8" textColor="FFFFFFFF" trackForegroundColor="FFCCCCCC" trackBackgroundColor="66999999">
+        <binding type="amp" level="instrument" position="0" parameter="AMP_VOLUME" />
+      </control>
+
+      <label x="90" y="55" width="60" height="20" text="Attack" textColor="FFFFFFFF" textSize="14" hAlign="center" />
+      <control x="100" y="75" width="30" height="90" parameterName="Attack" style="linear_vertical" minValue="0.0" maxValue="4.0" value="0.01" textColor="FFFFFFFF" trackForegroundColor="FFCCCCCC" trackBackgroundColor="66999999">
+        <binding type="amp" level="instrument" position="0" parameter="ENV_ATTACK" />
+      </control>
+
+      <label x="140" y="55" width="60" height="20" text="Release" textColor="FFFFFFFF" textSize="14" hAlign="center" />
+      <control x="150" y="75" width="30" height="90" parameterName="Release" style="linear_vertical" minValue="0.0" maxValue="20.0" value="1" textColor="FFFFFFFF" trackForegroundColor="FFCCCCCC" trackBackgroundColor="66999999">
+        <binding type="amp" level="instrument" position="1" parameter="ENV_RELEASE" />
+      </control>
+
+      
+      <labeled-knob x="220" y="75" width="90" textSize="14" textColor="FFFFFFFF" trackForegroundColor="FFCCCCCC" trackBackgroundColor="66999999" label="Drive" type="float" minValue="0" maxValue="1" value="0.1">
+        
+        <binding type="effect" level="group" groupIndex="0" effectIndex="0" parameter="FX_DRIVE" translation="table" translationTable="0,1;0.2,10;0.4,20;0.6,40;0.8,70;1,100" />
+        <binding type="effect" level="group" groupIndex="2" effectIndex="0" parameter="FX_DRIVE" translation="table" translationTable="0,1;0.2,10;0.4,20;0.6,40;0.8,70;1,100" />
+        <binding type="effect" level="group" groupIndex="0" effectIndex="0" parameter="FX_OUTPUT_LEVEL" translation="table" translationTable="0,1.0;0.2,0.8;0.4,0.6;0.6,0.4;0.8,0.25;1,0.12" />
+        <binding type="effect" level="group" groupIndex="2" effectIndex="0" parameter="FX_OUTPUT_LEVEL" translation="table" translationTable="0,1.0;0.2,0.8;0.4,0.6;0.6,0.4;0.8,0.25;1,0.12" />
+        
+        <binding type="effect" level="group" groupIndex="1" effectIndex="0" parameter="FX_DRIVE" translation="table" translationTable="0,2;0.2,20;0.4,45;0.6,80;0.8,200;1,400" />
+        <binding type="effect" level="group" groupIndex="3" effectIndex="0" parameter="FX_DRIVE" translation="table" translationTable="0,2;0.2,20;0.4,45;0.6,80;0.8,200;1,400" />
+        <binding type="effect" level="group" groupIndex="1" effectIndex="0" parameter="FX_OUTPUT_LEVEL" translation="table" translationTable="0,1.0;0.2,0.7;0.4,0.4;0.6,0.2;0.8,0.09;1,0.04" />
+        <binding type="effect" level="group" groupIndex="3" effectIndex="0" parameter="FX_OUTPUT_LEVEL" translation="table" translationTable="0,1.0;0.2,0.7;0.4,0.4;0.6,0.2;0.8,0.09;1,0.04" />
+      </labeled-knob>
+
+      
+      <labeled-knob x="310" y="75" width="90" textSize="14" textColor="FFFFFFFF" trackForegroundColor="FFCCCCCC" trackBackgroundColor="66999999" label="Tone" type="float" minValue="0" maxValue="1" value="0.7">
+        <binding type="effect" level="instrument" position="0" parameter="FX_FILTER_FREQUENCY" translation="table" translationTable="0,33;0.3,150;0.4,450;0.5,1100;0.7,4100;0.9,11000;1.0001,22000" />
+      </labeled-knob>
+
+      
+      <labeled-knob x="400" y="75" width="90" textSize="14" textColor="FFFFFFFF" trackForegroundColor="FFCCCCCC" trackBackgroundColor="66999999" label="Chorus" type="float" minValue="0.0" maxValue="1" value="0.25">
+        <binding type="effect" level="instrument" position="1" parameter="FX_MIX" />
+      </labeled-knob>
+
+      
+      <labeled-knob x="480" y="75" width="90" textSize="14" textColor="FFFFFFFF" trackForegroundColor="FFCCCCCC" trackBackgroundColor="66999999" label="Reverb" type="percent" minValue="0" maxValue="100" value="7.5">
+        <binding type="effect" level="instrument" position="2" parameter="FX_MIX" translation="linear" translationOutputMin="0" translationOutputMax="1" />
+      </labeled-knob>
+
+      
+      <label x="620" y="140" width="150" height="20" text="Drive Type" textColor="FFFFFFFF" textSize="14" />
+      <menu x="620" y="165" width="150" height="25" value="1" textColor="FFFFFFFF">
+        <option name="Warm">
+          
+          <binding type="general" level="group" position="0" parameter="ENABLED" translation="fixed_value" translationValue="true" />
+          <binding type="general" level="group" position="1" parameter="ENABLED" translation="fixed_value" translationValue="false" />
+          <binding type="general" level="group" position="2" parameter="ENABLED" translation="fixed_value" translationValue="true" />
+          <binding type="general" level="group" position="3" parameter="ENABLED" translation="fixed_value" translationValue="false" />
+          
+          <binding type="effect" level="group" groupIndex="0" effectIndex="0" parameter="FX_SHAPE" translation="fixed_value" translationValue="0" />
+          <binding type="effect" level="group" groupIndex="2" effectIndex="0" parameter="FX_SHAPE" translation="fixed_value" translationValue="0" />
+        </option>
+
+        <option name="Driven">
+          
+          <binding type="general" level="group" position="0" parameter="ENABLED" translation="fixed_value" translationValue="false" />
+          <binding type="general" level="group" position="1" parameter="ENABLED" translation="fixed_value" translationValue="true" />
+          <binding type="general" level="group" position="2" parameter="ENABLED" translation="fixed_value" translationValue="false" />
+          <binding type="general" level="group" position="3" parameter="ENABLED" translation="fixed_value" translationValue="true" />
+          
+          <binding type="effect" level="group" groupIndex="1" effectIndex="0" parameter="FX_SHAPE" translation="fixed_value" translationValue="1" />
+          <binding type="effect" level="group" groupIndex="3" effectIndex="0" parameter="FX_SHAPE" translation="fixed_value" translationValue="1" />
+        </option>
+      </menu>
+
+      
+      <label x="300" y="165" width="175" height="20" text="Mic Blend" textColor="FFFFFFFF" textSize="14" hAlign="center" />
+      <label x="250" y="190" width="40" height="20" text="Close" textColor="FFFFFFFF" textSize="12" hAlign="left" />
+      <label x="480" y="190" width="50" height="20" text="Distant" textColor="FFFFFFFF" textSize="12" hAlign="right" />
+      <control x="300" y="190" width="175" height="20" parameterName="Mic Blend" style="linear_horizontal" minValue="0" maxValue="100" value="50" textColor="FFFFFFFF" trackForegroundColor="FFCCCCCC" trackBackgroundColor="66999999">
+        <binding type="amp" level="tag" identifier="mic_close" parameter="AMP_VOLUME" translation="linear" translationOutputMin="1" translationOutputMax="0" />
+        <binding type="amp" level="tag" identifier="mic_distant" parameter="AMP_VOLUME" translation="linear" translationOutputMin="0" translationOutputMax="1" />
+      </control>
+
+      
+      <label x="620" y="75" width="150" height="20" text="Reverb Space" textColor="FFFFFFFF" textSize="14" />
+      <menu x="620" y="100" width="150" height="25" value="1" textColor="FFFFFFFF">
+        <option name="Close">
+          <binding type="effect" level="instrument" position="2" parameter="FX_IR_FILE" translation="fixed_value" translationValue="IRs/IR_Close.wav" />
+        </option>
+        <option name="Distant">
+          <binding type="effect" level="instrument" position="2" parameter="FX_IR_FILE" translation="fixed_value" translationValue="IRs/IR_Distant.wav" />
+        </option>
+      </menu>
+
+    </tab>
+
+    
+    <keyboard>
+      <color loNote="0" hiNote="127" color="FF444444" pressedColor="FF888888" />
+    </keyboard>
+  </ui>
+
+  
+  <groups volume="-3dB">
+    <group enabled="true"><sample path="Samples/C0_Close.wav" rootNote="12" loNote="12" hiNote="23" /><sample path="Samples/C1_Close.wav" rootNote="24" loNote="24" hiNote="35" /><sample path="Samples/C2_Close.wav" rootNote="36" loNote="36" hiNote="47" /><sample path="Samples/C3_Close.wav" rootNote="48" loNote="48" hiNote="59" /><sample path="Samples/C4_Close.wav" rootNote="60" loNote="60" hiNote="71" /><sample path="Samples/C5_Close.wav" rootNote="72" loNote="72" hiNote="83" /><sample path="Samples/C6_Close.wav" rootNote="84" loNote="84" hiNote="95" /><sample path="Samples/C7_Close.wav" rootNote="96" loNote="96" hiNote="108" /><sample path="Samples/C0_Distant.wav" rootNote="12" loNote="12" hiNote="23" /><sample path="Samples/C1_Distant.wav" rootNote="24" loNote="24" hiNote="35" /><sample path="Samples/C2_Distant.wav" rootNote="36" loNote="36" hiNote="47" /><sample path="Samples/C3_Distant.wav" rootNote="48" loNote="48" hiNote="59" /><sample path="Samples/C4_Distant.wav" rootNote="60" loNote="60" hiNote="71" /><sample path="Samples/C5_Distant.wav" rootNote="72" loNote="72" hiNote="83" /><sample path="Samples/C6_Distant.wav" rootNote="84" loNote="84" hiNote="95" /><sample path="Samples/C7_Distant.wav" rootNote="96" loNote="96" hiNote="108" /></group></groups>
+
+  
+  <effects>
+    <effect type="lowpass" frequency="22000.0" />
+    <effect type="chorus" mix="0.25" modDepth="0.2" modRate="0.2" />
+    <effect type="convolution" mix="0.075" irFile="IRs/IR_Distant.wav" />
+  </effects>
+</DecentSampler>
