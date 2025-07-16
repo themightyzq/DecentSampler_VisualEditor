@@ -205,11 +205,27 @@ class AddControlDialog(QDialog):
 
 class ProjectPropertiesPanel(QDockWidget):
     def __init__(self, parent=None):
-        super().__init__("Project Properties", parent)
+        super().__init__(parent)
+        
+        # Use consistent header styling
+        try:
+            from utils.ui_consistency import UIStyler
+            self.setWindowTitle("")  # Remove default title
+            # We'll add a proper header widget instead
+        except ImportError:
+            self.setWindowTitle("Project Properties")
         widget = QWidget()
         layout = QVBoxLayout()
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
+        
+        # Add consistent header
+        try:
+            from utils.ui_consistency import UIStyler
+            header = UIStyler.create_header_label("Project Properties", "Configure preset name, dimensions, colors, and effects")
+            layout.addWidget(header)
+        except ImportError:
+            pass
 
         # Preset name
         self.preset_name_edit = QLineEdit()
