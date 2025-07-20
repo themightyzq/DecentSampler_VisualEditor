@@ -43,6 +43,7 @@ class LFOEditor(QGroupBox):
         self.waveform_combo.addItems([
             "sine", "triangle", "sawtooth", "square", "s&h", "envelope_follower"
         ])
+        self.waveform_combo.setMinimumWidth(150)
         self.waveform_combo.currentTextChanged.connect(self.on_changed)
         layout.addRow("Waveform:", self.waveform_combo)
         
@@ -82,6 +83,7 @@ class LFOEditor(QGroupBox):
         self.sync_length_combo.addItems([
             "1/64", "1/32", "1/16", "1/8", "1/4", "1/2", "1", "2", "4", "8", "16"
         ])
+        self.sync_length_combo.setMinimumWidth(100)
         self.sync_length_combo.currentTextChanged.connect(self.on_changed)
         layout.addRow("Sync Length:", self.sync_length_combo)
         
@@ -216,6 +218,7 @@ class ModulationMatrixWidget(QWidget):
                 "AMP_VOLUME", "FX_MIX", "FX_FILTER_FREQUENCY", "FX_REVERB_WET_LEVEL",
                 "FX_CHORUS_MIX", "FX_DELAY_TIME", "FX_DELAY_FEEDBACK"
             ])
+            param_combo.setMinimumWidth(180)
             param_combo.setCurrentText(route.target.parameter)
             param_combo.currentTextChanged.connect(lambda text, r=route: setattr(r.target, 'parameter', text))
             param_combo.currentTextChanged.connect(self.routesChanged.emit)

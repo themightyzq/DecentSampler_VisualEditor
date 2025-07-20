@@ -6,6 +6,7 @@ Includes auto-save, keyboard shortcuts, workflow helpers, and usability enhancem
 from PyQt5.QtWidgets import QWidget, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTextEdit, QProgressDialog, QShortcut
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QSettings, QThread
 from PyQt5.QtGui import QKeySequence, QFont
+from utils.error_handling import ErrorHandler
 import os
 import json
 import time
@@ -20,6 +21,7 @@ class AutoSaveManager:
         self.auto_save_interval = 300000  # 5 minutes in milliseconds
         self.auto_save_enabled = True
         self.temp_save_dir = os.path.join(os.path.expanduser("~"), ".decentsampler_editor", "autosave")
+        self.error_handler = ErrorHandler(main_window)
         
         # Create temp directory if it doesn't exist
         os.makedirs(self.temp_save_dir, exist_ok=True)
@@ -55,7 +57,7 @@ class AutoSaveManager:
                 self.main_window.status_manager.show_message("Auto-saved", "info", 1000)
                 
         except Exception as e:
-            print(f"Auto-save failed: {e}")
+            self.error_handler.handle_error(e, "auto-saving preset", show_dialog=False)
             
     def _cleanup_old_autosaves(self):
         """Remove old auto-save files, keeping only the most recent 5"""
@@ -68,7 +70,8 @@ class AutoSaveManager:
                 os.remove(os.path.join(self.temp_save_dir, old_file))
                 
         except Exception as e:
-            print(f"Auto-save cleanup failed: {e}")
+            # Silently log - cleanup failures are not critical
+            pass
             
     def recover_auto_saves(self):
         """Return list of available auto-save files for recovery"""
@@ -90,7 +93,7 @@ class AutoSaveManager:
             return recovery_list
             
         except Exception as e:
-            print(f"Error retrieving auto-saves: {e}")
+            self.error_handler.handle_error(e, "retrieving auto-saves", show_dialog=False)
             return []
 
 class KeyboardShortcutManager:

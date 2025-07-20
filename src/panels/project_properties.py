@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (
     QLineEdit, QSpinBox, QPushButton, QColorDialog, QFileDialog, QHBoxLayout, QCheckBox,
     QGroupBox, QDoubleSpinBox, QComboBox, QGridLayout
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QIcon, QPainter, QColor
 
 from utils.effects_catalog import EFFECTS_CATALOG
@@ -292,6 +292,11 @@ class ProjectPropertiesPanel(QDockWidget):
         self.y_spinboxes = {}
         self.enable_checkboxes = {}
         self.checked_state = {}  # Store checked state for all controls
+        
+        # Timer for deferred rebuilds
+        self.rebuild_timer = QTimer()
+        self.rebuild_timer.setSingleShot(True)
+        self.rebuild_timer.timeout.connect(self._rebuild_effect_controls)
 
         # Build effect controls
         self._rebuild_effect_controls()
@@ -303,7 +308,130 @@ class ProjectPropertiesPanel(QDockWidget):
         self.bg_image_edit.textChanged.connect(self._live_update)
         # (ADSR signal connections removed)
 
+    def _create_control_row(self, idx, el):
+        """Create a single control row widget"""
+        row_widget = QWidget()
+        row_layout = QHBoxLayout()
+        row_layout.setContentsMargins(8, 2, 8, 2)
+        row_layout.setSpacing(8)
+        row_widget.setStyleSheet("""
+            background: #f7f7fa;
+            border: 1px solid #e0e0e0;
+        """)
+
+        # Label (not editable here, truncated to 12 chars with ellipsis)
+        label_val = str(getattr(el, "label", ""))
+        if len(label_val) > 12:
+            label_val = label_val[:9] + "..."
+        label_widget = QLabel(label_val)
+        label_widget.setMinimumWidth(100)
+        label_widget.setMaximumWidth(120)
+        label_widget.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
+        row_layout.addWidget(label_widget)
+
+        # X position (editable)
+        x_spin = QSpinBox()
+        x_spin.setRange(0, 812)
+        x_spin.setValue(getattr(el, "x", 0))
+        x_spin.setMinimumWidth(48)
+        x_spin.setMaximumWidth(56)
+        x_spin.setAlignment(Qt.AlignVCenter)
+        x_spin.setProperty('control_idx', idx)
+        x_spin.setProperty('property_name', 'x')
+        x_spin.valueChanged.connect(lambda value, i=idx: self._update_control_property(i, "x", value))
+        row_layout.addWidget(x_spin)
+
+        # Y position (editable)
+        y_spin = QSpinBox()
+        y_spin.setRange(0, 812)
+        y_spin.setValue(getattr(el, "y", 0))
+        y_spin.setMinimumWidth(48)
+        y_spin.setMaximumWidth(56)
+        y_spin.setAlignment(Qt.AlignVCenter)
+        y_spin.setProperty('control_idx', idx)
+        y_spin.setProperty('property_name', 'y')
+        y_spin.valueChanged.connect(lambda value, i=idx: self._update_control_property(i, "y", value))
+        row_layout.addWidget(y_spin)
+
+        # Width (editable)
+        width_spin = QSpinBox()
+        width_spin.setRange(16, 812)
+        width_spin.setValue(getattr(el, "width", 64))
+        width_spin.setMinimumWidth(48)
+        width_spin.setMaximumWidth(56)
+        width_spin.setAlignment(Qt.AlignVCenter)
+        width_spin.setProperty('control_idx', idx)
+        width_spin.setProperty('property_name', 'width')
+        width_spin.valueChanged.connect(lambda value, i=idx: self._update_control_property(i, "width", value))
+        row_layout.addWidget(width_spin)
+
+        # Height (editable)
+        height_spin = QSpinBox()
+        height_spin.setRange(16, 812)
+        height_spin.setValue(getattr(el, "height", 64))
+        height_spin.setMinimumWidth(48)
+        height_spin.setMaximumWidth(56)
+        height_spin.setAlignment(Qt.AlignVCenter)
+        height_spin.setProperty('control_idx', idx)
+        height_spin.setProperty('property_name', 'height')
+        height_spin.valueChanged.connect(lambda value, i=idx: self._update_control_property(i, "height", value))
+        row_layout.addWidget(height_spin)
+
+        # Edit and Remove buttons (truly square, E/X centered, 4px margin)
+        edit_btn = QPushButton("E")
+        edit_btn.setFixedSize(28, 28)
+        edit_btn.setToolTip("Edit")
+        edit_btn.setStyleSheet("""
+            font-size: 16px; font-weight: bold; text-align: center;
+            background: #e6eaff;
+        """)
+        edit_btn.clicked.connect(lambda _, i=idx: self._edit_control(i))
+        del_btn = QPushButton("✖")
+        del_btn.setFixedSize(28, 28)
+        del_btn.setToolTip("Delete")
+        del_btn.setStyleSheet("""
+            font-size: 16px; font-weight: bold; text-align: center;
+            background: #ffeaea;
+            margin-left: 4px;
+        """)
+        del_btn.clicked.connect(lambda _, i=idx: self._delete_control(i))
+        btns_widget = QWidget()
+        btns_layout = QHBoxLayout()
+        btns_layout.setContentsMargins(0, 0, 0, 0)
+        btns_layout.setSpacing(4)
+        btns_layout.addWidget(edit_btn)
+        btns_layout.addWidget(del_btn)
+        btns_widget.setLayout(btns_layout)
+        btns_widget.setMaximumWidth(68)
+        btns_widget.setMinimumWidth(60)
+        row_layout.addWidget(btns_widget)
+
+        row_widget.setLayout(row_layout)
+        return row_widget
+
+    def _request_deferred_rebuild(self, delay_ms=100):
+        """Request a rebuild after a short delay to avoid multiple rebuilds"""
+        self.rebuild_timer.stop()
+        self.rebuild_timer.start(delay_ms)
+    
     def _rebuild_effect_controls(self):
+        # Save currently focused widget info before rebuild
+        focused_widget = self.focusWidget()
+        focused_control_idx = None
+        focused_property = None
+        
+        # Try to identify which control and property has focus
+        if focused_widget:
+            # Check if it's a spinbox within our controls
+            parent = focused_widget.parent()
+            while parent and parent != self:
+                if hasattr(parent, 'property'):
+                    # Found a widget with our custom property
+                    focused_control_idx = parent.property('control_idx')
+                    focused_property = parent.property('property_name')
+                    break
+                parent = parent.parent()
+        
         # Remove all widgets from the layout
         while self.controls_layout.count():
             item = self.controls_layout.takeAt(0)
@@ -329,119 +457,55 @@ class ProjectPropertiesPanel(QDockWidget):
         mw = self.parent()
         if hasattr(mw, "preset") and hasattr(mw.preset, "ui") and hasattr(mw.preset.ui, "elements"):
             # Exclude ADSR controls from the populated control element list
+            # ADSR controls are managed exclusively by the Group Properties panel
+            # to provide a clear separation of concerns and avoid duplication
             filtered_elements = [
                 el for el in mw.preset.ui.elements
                 if str(getattr(el, "label", "")).lower() not in ["attack", "decay", "sustain", "release"]
             ]
             for idx, el in enumerate(filtered_elements):
-                row_widget = QWidget()
-                row_layout = QHBoxLayout()
-                row_layout.setContentsMargins(8, 2, 8, 2)
-                row_layout.setSpacing(8)
-                row_widget.setStyleSheet("""
-                    background: #f7f7fa;
-                    border: 1px solid #e0e0e0;
-                """)
-
-                # Label (not editable here, truncated to 12 chars with ellipsis)
-                label_val = str(getattr(el, "label", ""))
-                if len(label_val) > 12:
-                    label_val = label_val[:9] + "..."
-                label_widget = QLabel(label_val)
-                label_widget.setMinimumWidth(100)
-                label_widget.setMaximumWidth(120)
-                label_widget.setAlignment(Qt.AlignVCenter | Qt.AlignLeft)
-                row_layout.addWidget(label_widget)
-
-                # X position (editable)
-                x_spin = QSpinBox()
-                x_spin.setRange(0, 812)
-                x_spin.setValue(getattr(el, "x", 0))
-                x_spin.setMinimumWidth(48)
-                x_spin.setMaximumWidth(56)
-                x_spin.setAlignment(Qt.AlignVCenter)
-                x_spin.valueChanged.connect(lambda value, i=idx: self._update_control_property(i, "x", value))
-                row_layout.addWidget(x_spin)
-
-                # Y position (editable)
-                y_spin = QSpinBox()
-                y_spin.setRange(0, 812)
-                y_spin.setValue(getattr(el, "y", 0))
-                y_spin.setMinimumWidth(48)
-                y_spin.setMaximumWidth(56)
-                y_spin.setAlignment(Qt.AlignVCenter)
-                y_spin.valueChanged.connect(lambda value, i=idx: self._update_control_property(i, "y", value))
-                row_layout.addWidget(y_spin)
-
-                # Width (editable)
-                width_spin = QSpinBox()
-                width_spin.setRange(16, 812)
-                width_spin.setValue(getattr(el, "width", 64))
-                width_spin.setMinimumWidth(48)
-                width_spin.setMaximumWidth(56)
-                width_spin.setAlignment(Qt.AlignVCenter)
-                width_spin.valueChanged.connect(lambda value, i=idx: self._update_control_property(i, "width", value))
-                row_layout.addWidget(width_spin)
-
-                # Height (editable)
-                height_spin = QSpinBox()
-                height_spin.setRange(16, 812)
-                height_spin.setValue(getattr(el, "height", 64))
-                height_spin.setMinimumWidth(48)
-                height_spin.setMaximumWidth(56)
-                height_spin.setAlignment(Qt.AlignVCenter)
-                height_spin.valueChanged.connect(lambda value, i=idx: self._update_control_property(i, "height", value))
-                row_layout.addWidget(height_spin)
-
-                # Edit and Remove buttons (truly square, E/X centered, 4px margin)
-                edit_btn = QPushButton("E")
-                edit_btn.setFixedSize(28, 28)
-                edit_btn.setToolTip("Edit")
-                edit_btn.setStyleSheet("""
-                    font-size: 16px; font-weight: bold; text-align: center;
-                    background: #e6eaff;
-                """)
-                edit_btn.clicked.connect(lambda _, i=idx: self._edit_control(i))
-                del_btn = QPushButton("✖")
-                del_btn.setFixedSize(28, 28)
-                del_btn.setToolTip("Delete")
-                del_btn.setStyleSheet("""
-                    font-size: 16px; font-weight: bold; text-align: center;
-                    background: #ffeaea;
-                    margin-left: 4px;
-                """)
-                del_btn.clicked.connect(lambda _, i=idx: self._delete_control(i))
-                btns_widget = QWidget()
-                btns_layout = QHBoxLayout()
-                btns_layout.setContentsMargins(0, 0, 0, 0)
-                btns_layout.setSpacing(4)
-                btns_layout.addWidget(edit_btn)
-                btns_layout.addWidget(del_btn)
-                btns_widget.setLayout(btns_layout)
-                btns_widget.setMaximumWidth(68)
-                btns_widget.setMinimumWidth(60)
-                row_layout.addWidget(btns_widget)
-
-                row_widget.setLayout(row_layout)
+                row_widget = self._create_control_row(idx, el)
                 self.controls_layout.addWidget(row_widget)
 
         # Add vertical spacing (24px) before the "Add Control" button
         self.controls_layout.addSpacing(24)
         self.add_control_btn = QPushButton("Add Control")
-        self.add_control_btn.setMinimumHeight(28)
-        self.add_control_btn.setStyleSheet("font-size: 13px;")
+        self.add_control_btn.setMinimumHeight(32)
+        self.add_control_btn.setMinimumWidth(100)
+        self.add_control_btn.setStyleSheet("font-size: 13px; padding: 4px 12px;")
         self.add_control_btn.clicked.connect(self._open_add_control_modal)
         self.controls_layout.addWidget(self.add_control_btn)
         # Set the properties panel width to a compact value
         self.setMinimumWidth(380)
         self.setMaximumWidth(420)
+        
+        # Restore focus if we had a focused widget before rebuild
+        if focused_control_idx is not None and focused_property is not None:
+            # Find the widget with matching properties
+            for i in range(self.controls_layout.count()):
+                item = self.controls_layout.itemAt(i)
+                if item and item.widget():
+                    row_widget = item.widget()
+                    # Search through the row's children for spinboxes
+                    for child in row_widget.findChildren(QSpinBox):
+                        if (child.property('control_idx') == focused_control_idx and 
+                            child.property('property_name') == focused_property):
+                            # Restore focus to this widget
+                            child.setFocus()
+                            return
 
     def _update_control_property(self, idx, prop, value):
         mw = self.parent()
         if hasattr(mw, "preset") and hasattr(mw.preset, "ui") and hasattr(mw.preset.ui, "elements"):
-            elements = mw.preset.ui.elements
-            if 0 <= idx < len(elements):
-                setattr(elements[idx], prop, value)
+            # Get the actual element from filtered list
+            filtered_elements = [
+                el for el in mw.preset.ui.elements
+                if str(getattr(el, "label", "")).lower() not in ["attack", "decay", "sustain", "release"]
+            ]
+            
+            if 0 <= idx < len(filtered_elements):
+                element = filtered_elements[idx]
+                setattr(element, prop, value)
                 if hasattr(mw, "preview_canvas"):
                     mw.preview_canvas.set_preset(mw.preset, "")
         # No need to call _rebuild_effect_controls() here to avoid losing focus on spinboxes
@@ -506,25 +570,12 @@ class ProjectPropertiesPanel(QDockWidget):
                 el.default = default_val
             else:
                 # Add new control
-                # Build binding for amp/ADSR or effect
+                # Build binding for effect parameters only
+                # (ADSR controls are managed by Group Properties panel)
                 bindings = []
-                if label.lower() in ["attack", "decay", "sustain", "release"]:
-                    param_map = {
-                        "attack": "ENV_ATTACK",
-                        "decay": "ENV_DECAY",
-                        "sustain": "ENV_SUSTAIN",
-                        "release": "ENV_RELEASE"
-                    }
-                    param_name = param_map[label.lower()]
-                    binding = {
-                        "type": "amp",
-                        "level": "instrument",
-                        "position": "0",
-                        "parameter": param_name
-                    }
-                    bindings = [binding]
-                    target = param_name
-                elif effect and param:
+                target = None
+                
+                if effect and param:
                     # Map to DecentSampler parameter using EFFECTS_CATALOG
                     from utils.effects_catalog import EFFECTS_CATALOG
                     ds_param = None
@@ -586,7 +637,23 @@ class ProjectPropertiesPanel(QDockWidget):
                 mw.preset.ui.elements.append(el)
             if hasattr(mw, "preview_canvas"):
                 mw.preview_canvas.set_preset(mw.preset, "")
-            self._rebuild_effect_controls()
+            
+            # Use incremental update instead of full rebuild
+            if edit_index is None:
+                # Adding new control - insert before the "Add Control" button
+                # Get filtered elements to determine the new index
+                filtered_elements = [
+                    e for e in mw.preset.ui.elements
+                    if str(getattr(e, "label", "")).lower() not in ["attack", "decay", "sustain", "release"]
+                ]
+                new_idx = len(filtered_elements) - 1  # -1 because we just added it
+                row_widget = self._create_control_row(new_idx, el)
+                # Find the position to insert (before the spacing and button)
+                insert_position = self.controls_layout.count() - 2  # -1 for button, -1 for spacing
+                self.controls_layout.insertWidget(insert_position, row_widget)
+            else:
+                # Editing existing - still need full rebuild due to index changes
+                self._rebuild_effect_controls()
         # Optionally, refresh the controls panel or UI as needed
         # self._rebuild_effect_controls()
 
@@ -720,10 +787,25 @@ class ProjectPropertiesPanel(QDockWidget):
         mw = self.parent()
         if not (hasattr(mw, "preset") and hasattr(mw.preset, "ui") and hasattr(mw.preset.ui, "elements")):
             return
-        del mw.preset.ui.elements[idx]
-        if hasattr(mw, "preview_canvas"):
-            mw.preview_canvas.set_preset(mw.preset, "")
-        self._rebuild_effect_controls()
+        
+        # Get the actual index in the full elements list
+        filtered_elements = [
+            el for el in mw.preset.ui.elements
+            if str(getattr(el, "label", "")).lower() not in ["attack", "decay", "sustain", "release"]
+        ]
+        
+        if 0 <= idx < len(filtered_elements):
+            # Find the element to delete in the full list
+            element_to_delete = filtered_elements[idx]
+            full_idx = mw.preset.ui.elements.index(element_to_delete)
+            del mw.preset.ui.elements[full_idx]
+            
+            if hasattr(mw, "preview_canvas"):
+                mw.preview_canvas.set_preset(mw.preset, "")
+            
+            # Since we're deleting, we need to rebuild to update all indices
+            # But we can defer it slightly to avoid interrupting user workflow
+            self._request_deferred_rebuild(50)
 
     def set_flags_from_preset(self, preset):
         # Set effect checkboxes from preset
@@ -751,93 +833,11 @@ class ProjectPropertiesPanel(QDockWidget):
             self.release_spin.value(),
             enabled=enabled
         )
-        self._sync_adsr_controls_to_elements()
+        # ADSR controls are now managed exclusively by Group Properties panel
 
-    def _sync_adsr_controls_to_elements(self):
-        # Ensure enabled ADSR controls are present in preset.ui.elements, with correct type and position
-        mw = self.parent()
-        if not (hasattr(mw, "preset") and hasattr(mw.preset, "ui") and hasattr(mw.preset.ui, "elements")):
-            return
-        elements = mw.preset.ui.elements
-        adsr_names = ["Attack", "Decay", "Sustain", "Release"]
-        spins = [self.attack_spin, self.decay_spin, self.sustain_spin, self.release_spin]
-        checkboxes = [self.attack_checkbox, self.decay_checkbox, self.sustain_checkbox, self.release_checkbox]
-        for i, name in enumerate(adsr_names):
-            # Remove any existing element for this ADSR if present
-            elements[:] = [el for el in elements if el.label != name]
-            if checkboxes[i].isChecked():
-                # Add UIElement for enabled ADSR
-                widget_type = self.adsr_widget_types[name].currentText()
-                orientation = self.adsr_orientations[name].currentText() if widget_type.lower() == "slider" else None
-                x = self.adsr_x_spins[name].value()
-                y = self.adsr_y_spins[name].value()
-                value = spins[i].value()
-                el = type("UIElement", (), {})()  # Dummy UIElement if import fails
-                try:
-                    from model import UIElement as RealUIElement
-                    tag_value = "labeled-slider" if widget_type.lower() == "slider" else "labeled-knob"
-                    el = RealUIElement(
-                        x=x,
-                        y=y,
-                        width=64,
-                        height=64,
-                        label=name,
-                        skin=None,
-                        tag=tag_value,
-                        widget_type=widget_type,
-                        orientation=orientation
-                    )
-                except Exception:
-                    el.x = x
-                    el.y = y
-                    el.width = 64
-                    el.height = 64
-                    el.label = name
-                    el.skin = None
-                    el.tag = "labeled-slider" if widget_type.lower() == "slider" else "labeled-knob"
-                    el.widget_type = widget_type
-                    el.orientation = orientation
-                el.effect_type = None
-                el.parameter = None
-                el.min = 0.0
-                el.max = 1.0
-                el.default = value
-                # Set DecentSampler target and binding for standard envelope controls
-                if name == "Attack":
-                    el.target = "ENV_ATTACK"
-                    el.bindings = [{
-                        "type": "amp",
-                        "level": "instrument",
-                        "position": "0",
-                        "parameter": "ENV_ATTACK"
-                    }]
-                elif name == "Decay":
-                    el.target = "ENV_DECAY"
-                    el.bindings = [{
-                        "type": "amp",
-                        "level": "instrument",
-                        "position": "0",
-                        "parameter": "ENV_DECAY"
-                    }]
-                elif name == "Sustain":
-                    el.target = "ENV_SUSTAIN"
-                    el.bindings = [{
-                        "type": "amp",
-                        "level": "instrument",
-                        "position": "0",
-                        "parameter": "ENV_SUSTAIN"
-                    }]
-                elif name == "Release":
-                    el.target = "ENV_RELEASE"
-                    el.bindings = [{
-                        "type": "amp",
-                        "level": "instrument",
-                        "position": "0",
-                        "parameter": "ENV_RELEASE"
-                    }]
-                elements.append(el)
-        if hasattr(mw, "preview_canvas"):
-            mw.preview_canvas.set_preset(mw.preset, "")
+    # REMOVED: _sync_adsr_controls_to_elements method
+    # ADSR UI elements are now managed exclusively by the Group Properties panel
+    # to avoid duplication and confusion about which panel controls ADSR
 
     def _flag_update(self):
         mw = self.parent()

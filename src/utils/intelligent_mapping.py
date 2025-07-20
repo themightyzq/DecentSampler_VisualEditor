@@ -502,7 +502,6 @@ class IntelligentMappingDialog(QDialog):
             confirm_cb = QCheckBox()
             confirm_cb.setChecked(True)
             self.note_table.setCellWidget(row, 4, confirm_cb)
-            print(f"DEBUG: Created note checkbox for row {row}, checked: {confirm_cb.isChecked()}")
         
         # Populate layer groups
         layer_groups = suggestions.get('layer_groups', {})
@@ -530,7 +529,6 @@ class IntelligentMappingDialog(QDialog):
             confirm_cb = QCheckBox()
             confirm_cb.setChecked(True)
             self.layer_table.setCellWidget(row, 3, confirm_cb)
-            print(f"DEBUG: Created layer checkbox for row {row}, checked: {confirm_cb.isChecked()}")
         
         # Resize columns
         self.note_table.resizeColumnsToContents()
@@ -562,36 +560,27 @@ class IntelligentMappingDialog(QDialog):
     
     def get_confirmed_mappings(self) -> Tuple[Dict, Dict, Dict]:
         """Get the confirmed mappings from the dialog"""
-        print(f"DEBUG: get_confirmed_mappings called")
         note_mappings = self.mapping_suggestions.get('note_mappings', {})
         layer_groups = self.mapping_suggestions.get('layer_groups', {})
-        print(f"DEBUG: Available note_mappings: {len(note_mappings)}")
-        print(f"DEBUG: Available layer_groups: {len(layer_groups)}")
         
         confirmed_notes = {}
         confirmed_layers = {}
         
         # Get confirmed note mappings
-        print(f"DEBUG: Checking note table rows: {self.note_table.rowCount()}")
         for row in range(self.note_table.rowCount()):
             cb = self.note_table.cellWidget(row, 4)
-            print(f"DEBUG: Note row {row}, checkbox: {cb}, checked: {cb.isChecked() if cb else 'None'}")
             if cb and cb.isChecked():
                 note_name = self.note_table.item(row, 0).text()
                 midi_note = self._note_name_to_midi(note_name)
-                print(f"DEBUG: Confirmed note mapping: {note_name} -> {midi_note}")
                 if midi_note in note_mappings:
                     confirmed_notes[midi_note] = note_mappings[midi_note]
         
         # Get confirmed layer groups
-        print(f"DEBUG: Checking layer table rows: {self.layer_table.rowCount()}")
         for row in range(self.layer_table.rowCount()):
             cb = self.layer_table.cellWidget(row, 3)
-            print(f"DEBUG: Layer row {row}, checkbox: {cb}, checked: {cb.isChecked() if cb else 'None'}")
             if cb and cb.isChecked():
                 note_name = self.layer_table.item(row, 0).text()
                 midi_note = self._note_name_to_midi(note_name)
-                print(f"DEBUG: Confirmed layer group: {note_name} -> {midi_note}")
                 if midi_note in layer_groups:
                     confirmed_layers[midi_note] = layer_groups[midi_note]
         
@@ -601,9 +590,6 @@ class IntelligentMappingDialog(QDialog):
             'preserve_existing': self.preserve_existing_cb.isChecked()
         }
         
-        print(f"DEBUG: Final confirmed_notes: {len(confirmed_notes)}")
-        print(f"DEBUG: Final confirmed_layers: {len(confirmed_layers)}")
-        print(f"DEBUG: Options: {options}")
         
         return confirmed_notes, confirmed_layers, options
     

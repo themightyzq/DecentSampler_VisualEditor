@@ -48,14 +48,8 @@ class PreviewCanvas(QWidget):
         # and render it to an off-screen QPixmap using its static render_to_pixmap method, then draw it at the correct position.
         # If no class matches, use FallbackWidget to draw a rectangle + centered label.
         if self.preset and hasattr(self.preset, "ui") and hasattr(self.preset.ui, "elements"):
-            print("DEBUG: Entering UI element rendering loop")
-            print(f"DEBUG: preset.ui.elements = {self.preset.ui.elements} (len={len(self.preset.ui.elements)})")
             for idx, el in enumerate(self.preset.ui.elements):
-                print(f"DEBUG: Rendering element {idx}: {el.__dict__}")
                 rect = QRect(el.x, el.y, el.width, el.height)
-                # Draw a debug rectangle to show where the element should be
-                painter.setPen(Qt.red)
-                painter.drawRect(rect)
                 # Prefer widget_type for rendering, fallback to tag, then "Knob"
                 widget_type = getattr(el, "widget_type", None)
                 tag = getattr(el, "tag", None)

@@ -94,14 +94,20 @@ class GroupManagerWidget(QWidget):
         self.tutorial_btn = QPushButton("📚 Tutorial")
         self.tutorial_btn.clicked.connect(self.show_tutorial)
         self.tutorial_btn.setToolTip("Learn about velocity layers, sample blending, and simultaneous layers")
+        self.tutorial_btn.setMinimumHeight(28)
+        self.tutorial_btn.setMinimumWidth(95)
         group_header.addWidget(self.tutorial_btn)
         
         self.add_group_btn = QPushButton("Add Group")
         self.add_group_btn.clicked.connect(self.add_group)
+        self.add_group_btn.setMinimumHeight(28)
+        self.add_group_btn.setMinimumWidth(95)
         group_header.addWidget(self.add_group_btn)
         
         self.remove_group_btn = QPushButton("Remove Group")
         self.remove_group_btn.clicked.connect(self.remove_group)
+        self.remove_group_btn.setMinimumHeight(28)
+        self.remove_group_btn.setMinimumWidth(110)
         group_header.addWidget(self.remove_group_btn)
         
         left_panel.addLayout(group_header)
@@ -118,16 +124,19 @@ class GroupManagerWidget(QWidget):
         self.velocity_layers_btn = QPushButton("Create Velocity Layers")
         self.velocity_layers_btn.clicked.connect(self.create_velocity_layers)
         self.velocity_layers_btn.setToolTip("Create multiple groups with different velocity ranges")
+        self.velocity_layers_btn.setMinimumHeight(30)
         quick_layout.addWidget(self.velocity_layers_btn)
         
         self.blend_layers_btn = QPushButton("Create Blend Layers")
         self.blend_layers_btn.clicked.connect(self.create_blend_layers)
         self.blend_layers_btn.setToolTip("Put multiple samples in the same group for blending")
+        self.blend_layers_btn.setMinimumHeight(30)
         quick_layout.addWidget(self.blend_layers_btn)
         
         self.round_robin_btn = QPushButton("Setup Round-Robin")
         self.round_robin_btn.clicked.connect(self.setup_round_robin)
         self.round_robin_btn.setToolTip("Create round-robin alternation between samples")
+        self.round_robin_btn.setMinimumHeight(30)
         quick_layout.addWidget(self.round_robin_btn)
         
         quick_setup.setLayout(quick_layout)
@@ -323,39 +332,83 @@ class GroupEditorWidget(QGroupBox):
         
     def init_basic_tab(self, tab):
         layout = QFormLayout()
+        layout.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        layout.setHorizontalSpacing(12)
+        layout.setVerticalSpacing(12)
+        
+        # Consistent label styling
+        label_style = """
+            QLabel {
+                font-size: 14px;
+                font-weight: 500;
+                color: #f0f0f0;
+                min-width: 80px;
+            }
+        """
+        
+        # Consistent field styling
+        field_style = """
+            QLineEdit, QDoubleSpinBox {
+                min-height: 28px;
+                font-size: 14px;
+                padding: 4px 8px;
+                background-color: #2a2a2a;
+                border: 1px solid #444;
+                border-radius: 4px;
+                color: #f0f0f0;
+            }
+            QLineEdit:focus, QDoubleSpinBox:focus {
+                border-color: #4a7c59;
+            }
+        """
         
         # Group name
+        name_label = QLabel("Name:")
+        name_label.setStyleSheet(label_style)
         self.name_edit = QLineEdit()
+        self.name_edit.setStyleSheet(field_style)
         self.name_edit.textChanged.connect(self.on_property_changed)
-        layout.addRow("Name:", self.name_edit)
+        layout.addRow(name_label, self.name_edit)
         
         # Enabled checkbox
+        enabled_label = QLabel("Enabled:")
+        enabled_label.setStyleSheet(label_style)
         self.enabled_check = QCheckBox()
         self.enabled_check.toggled.connect(self.on_property_changed)
-        layout.addRow("Enabled:", self.enabled_check)
+        layout.addRow(enabled_label, self.enabled_check)
         
         # Volume
+        volume_label = QLabel("Volume:")
+        volume_label.setStyleSheet(label_style)
         self.volume_spin = QDoubleSpinBox()
+        self.volume_spin.setStyleSheet(field_style)
         self.volume_spin.setRange(-60.0, 20.0)
         self.volume_spin.setSingleStep(0.1)
         self.volume_spin.setDecimals(1)
         self.volume_spin.setSuffix(" dB")
         self.volume_spin.valueChanged.connect(self.on_property_changed)
-        layout.addRow("Volume:", self.volume_spin)
+        layout.addRow(volume_label, self.volume_spin)
         
         # Pan
+        pan_label = QLabel("Pan:")
+        pan_label.setStyleSheet(label_style)
         self.pan_spin = QDoubleSpinBox()
+        self.pan_spin.setStyleSheet(field_style)
         self.pan_spin.setRange(-1.0, 1.0)
         self.pan_spin.setSingleStep(0.1)
         self.pan_spin.setDecimals(2)
         self.pan_spin.valueChanged.connect(self.on_property_changed)
-        layout.addRow("Pan:", self.pan_spin)
+        layout.addRow(pan_label, self.pan_spin)
         
         # Tags
+        tags_label = QLabel("Tags:")
+        tags_label.setStyleSheet(label_style)
         self.tags_edit = QLineEdit()
+        self.tags_edit.setStyleSheet(field_style)
         self.tags_edit.setPlaceholderText("Enter tags separated by commas")
         self.tags_edit.textChanged.connect(self.on_property_changed)
-        layout.addRow("Tags:", self.tags_edit)
+        layout.addRow(tags_label, self.tags_edit)
         
         tab.setLayout(layout)
         
@@ -405,45 +458,110 @@ class GroupEditorWidget(QGroupBox):
         
     def init_advanced_tab(self, tab):
         layout = QFormLayout()
+        layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
         
         # Group-level envelope override
         envelope_group = QGroupBox("Group Envelope Override")
+        envelope_group.setStyleSheet("""
+            QGroupBox {
+                font-size: 14px;
+                font-weight: bold;
+                color: #f0f0f0;
+                border: 2px solid #444;
+                border-radius: 6px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px 0 5px;
+            }
+        """)
+        
         envelope_layout = QFormLayout()
+        envelope_layout.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        envelope_layout.setFieldGrowthPolicy(QFormLayout.ExpandingFieldsGrow)
+        envelope_layout.setHorizontalSpacing(12)
+        envelope_layout.setVerticalSpacing(12)
+        
+        # Consistent label styling
+        label_style = """
+            QLabel {
+                font-size: 14px;
+                font-weight: 500;
+                color: #f0f0f0;
+                min-width: 80px;
+            }
+        """
+        
+        # Consistent field styling
+        field_style = """
+            QDoubleSpinBox {
+                min-height: 28px;
+                font-size: 14px;
+                padding: 4px 8px;
+                background-color: #2a2a2a;
+                border: 1px solid #444;
+                border-radius: 4px;
+                color: #f0f0f0;
+            }
+            QDoubleSpinBox:focus {
+                border-color: #4a7c59;
+            }
+        """
         
         self.use_group_envelope = QCheckBox("Override instrument envelope")
+        self.use_group_envelope.setStyleSheet("font-size: 14px; color: #f0f0f0;")
         self.use_group_envelope.toggled.connect(self.on_envelope_toggle)
         envelope_layout.addRow("", self.use_group_envelope)
         
+        # Attack
+        attack_label = QLabel("Attack:")
+        attack_label.setStyleSheet(label_style)
         self.group_attack = QDoubleSpinBox()
+        self.group_attack.setStyleSheet(field_style)
         self.group_attack.setRange(0.0, 10.0)
         self.group_attack.setSingleStep(0.01)
         self.group_attack.setDecimals(3)
         self.group_attack.setSuffix(" sec")
         self.group_attack.valueChanged.connect(self.on_property_changed)
-        envelope_layout.addRow("Attack:", self.group_attack)
+        envelope_layout.addRow(attack_label, self.group_attack)
         
+        # Decay
+        decay_label = QLabel("Decay:")
+        decay_label.setStyleSheet(label_style)
         self.group_decay = QDoubleSpinBox()
+        self.group_decay.setStyleSheet(field_style)
         self.group_decay.setRange(0.0, 10.0)
         self.group_decay.setSingleStep(0.01)
         self.group_decay.setDecimals(3)
         self.group_decay.setSuffix(" sec")
         self.group_decay.valueChanged.connect(self.on_property_changed)
-        envelope_layout.addRow("Decay:", self.group_decay)
+        envelope_layout.addRow(decay_label, self.group_decay)
         
+        # Sustain
+        sustain_label = QLabel("Sustain:")
+        sustain_label.setStyleSheet(label_style)
         self.group_sustain = QDoubleSpinBox()
+        self.group_sustain.setStyleSheet(field_style)
         self.group_sustain.setRange(0.0, 1.0)
         self.group_sustain.setSingleStep(0.01)
         self.group_sustain.setDecimals(3)
         self.group_sustain.valueChanged.connect(self.on_property_changed)
-        envelope_layout.addRow("Sustain:", self.group_sustain)
+        envelope_layout.addRow(sustain_label, self.group_sustain)
         
+        # Release
+        release_label = QLabel("Release:")
+        release_label.setStyleSheet(label_style)
         self.group_release = QDoubleSpinBox()
+        self.group_release.setStyleSheet(field_style)
         self.group_release.setRange(0.0, 10.0)
         self.group_release.setSingleStep(0.01)
         self.group_release.setDecimals(3)
         self.group_release.setSuffix(" sec")
         self.group_release.valueChanged.connect(self.on_property_changed)
-        envelope_layout.addRow("Release:", self.group_release)
+        envelope_layout.addRow(release_label, self.group_release)
         
         envelope_group.setLayout(envelope_layout)
         layout.addRow(envelope_group)

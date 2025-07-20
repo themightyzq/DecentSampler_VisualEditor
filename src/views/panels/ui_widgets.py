@@ -23,8 +23,8 @@ class KnobWidget(QWidget):
             if not skin_pixmap.isNull():
                 painter.drawPixmap(rect, skin_pixmap)
             else:
-                painter.setPen(Qt.red)
-                painter.drawRect(rect)
+                # Fallback to default rendering when skin fails to load
+                pass
         else:
             # Draw track background
             painter.setPen(Qt.NoPen)
@@ -55,8 +55,8 @@ class SliderWidget(QWidget):
             if not skin_pixmap.isNull():
                 painter.drawPixmap(rect, skin_pixmap)
             else:
-                painter.setPen(Qt.red)
-                painter.drawRect(rect)
+                # Fallback to default rendering when skin fails to load
+                pass
         else:
             painter.setPen(Qt.darkGray)
             painter.setBrush(QColor(200, 200, 255))
@@ -83,8 +83,8 @@ class ButtonWidget(QWidget):
             if not skin_pixmap.isNull():
                 painter.drawPixmap(rect, skin_pixmap)
             else:
-                painter.setPen(Qt.red)
-                painter.drawRect(rect)
+                # Fallback to default rendering when skin fails to load
+                pass
         else:
             painter.setPen(Qt.darkGray)
             painter.setBrush(QColor(180, 255, 180))
@@ -107,8 +107,8 @@ class MenuWidget(QWidget):
             if not skin_pixmap.isNull():
                 painter.drawPixmap(rect, skin_pixmap)
             else:
-                painter.setPen(Qt.red)
-                painter.drawRect(rect)
+                # Fallback to default rendering when skin fails to load
+                pass
         else:
             painter.setPen(Qt.darkGray)
             painter.setBrush(QColor(255, 255, 180))
@@ -162,6 +162,7 @@ WIDGET_CLASS_MAP = {
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QCheckBox, QLabel, QLineEdit, QDoubleSpinBox, QPushButton, QComboBox, QGroupBox
 )
+from utils.theme_manager import ThemeColors, ThemeSpacing
 
 class ADSRParameterCard(QWidget):
     def __init__(self, param_name, value=0.0, value_range=(0.0, 10.0), value_step=0.01, value_decimals=3, type_options=None, parent=None):
@@ -169,28 +170,19 @@ class ADSRParameterCard(QWidget):
         self.param_name = param_name
         self.setObjectName(f"{param_name}_adsr_card")
 
-        # Card styling for visual grouping
-        self.setStyleSheet("""
-            QWidget#{}_adsr_card {{
-                border: 1.5px solid #cccccc;
-                border-radius: 8px;
-                background: #f8f8f8;
+        # Card styling using dark theme colors
+        self.setStyleSheet(f"""
+            QWidget#{param_name}_adsr_card {{
+                border: 1px solid {ThemeColors.BORDER};
+                border-radius: {ThemeSpacing.RADIUS_LARGE}px;
+                background: {ThemeColors.PANEL_BG};
+                padding: 4px;
             }}
-            QLineEdit {{
-                background: #fff;
-                border: 1px solid #bbb;
-                border-radius: 4px;
-                padding: 2px 6px;
+            QWidget#{param_name}_adsr_card:hover {{
+                border-color: {ThemeColors.BORDER_FOCUS};
+                background: {ThemeColors.HOVER_BG};
             }}
-            QDoubleSpinBox {{
-                min-width: 60px;
-                max-width: 80px;
-            }}
-            QPushButton {{
-                min-width: 70px;
-                max-width: 90px;
-            }}
-        """.format(param_name))
+        """)
 
         card_layout = QVBoxLayout()
         card_layout.setContentsMargins(10, 10, 10, 10)
@@ -206,18 +198,19 @@ class ADSRParameterCard(QWidget):
         self.label_btn.setChecked(False)
         self.label_btn.setFlat(False)
         self.label_btn.setCursor(Qt.PointingHandCursor)
-        self.label_btn.setMinimumWidth(90)
-        self.label_btn.setMaximumWidth(120)
+        self.label_btn.setMinimumWidth(100)
+        self.label_btn.setMaximumWidth(130)
+        self.label_btn.setMinimumHeight(30)
         # Style to match "Settings" button, with blue highlight when checked
         self.label_btn.setStyleSheet("""
             QPushButton {
                 font-weight: bold;
-                font-size: 15px;
+                font-size: 14px;
                 background: #e0e0e0;
                 border: 1.5px solid #b0b0b0;
                 border-radius: 6px;
                 color: #222;
-                padding: 4px 12px;
+                padding: 5px 14px;
             }
             QPushButton:checked {
                 background: #2979ff;
@@ -255,18 +248,19 @@ class ADSRParameterCard(QWidget):
         # X/Y row
         xy_row = QHBoxLayout()
         xy_row.setContentsMargins(0, 0, 0, 0)
-        xy_row.setSpacing(4)
+        xy_row.setSpacing(6)
         self.x_spin = QSpinBox()
         self.x_spin.setRange(0, 2000)
         self.x_spin.setValue(getattr(self, "_adsr_x", 40))
-        self.x_spin.setFixedWidth(48)
+        self.x_spin.setFixedWidth(55)
         self.y_spin = QSpinBox()
         self.y_spin.setRange(0, 2000)
         self.y_spin.setValue(getattr(self, "_adsr_y", 100))
-        self.y_spin.setFixedWidth(48)
+        self.y_spin.setFixedWidth(55)
         xy_row.addStretch()
         xy_row.addWidget(QLabel("X:"))
         xy_row.addWidget(self.x_spin)
+        xy_row.addSpacing(8)
         xy_row.addWidget(QLabel("Y:"))
         xy_row.addWidget(self.y_spin)
         xy_row.addStretch()
@@ -275,18 +269,19 @@ class ADSRParameterCard(QWidget):
         # Width/Height row
         wh_row = QHBoxLayout()
         wh_row.setContentsMargins(0, 0, 0, 0)
-        wh_row.setSpacing(4)
+        wh_row.setSpacing(6)
         self.width_spin = QSpinBox()
         self.width_spin.setRange(16, 512)
         self.width_spin.setValue(getattr(self, "_adsr_width", 64))
-        self.width_spin.setFixedWidth(48)
+        self.width_spin.setFixedWidth(55)
         self.height_spin = QSpinBox()
         self.height_spin.setRange(16, 512)
         self.height_spin.setValue(getattr(self, "_adsr_height", 64))
-        self.height_spin.setFixedWidth(48)
+        self.height_spin.setFixedWidth(55)
         wh_row.addStretch()
         wh_row.addWidget(QLabel("W:"))
         wh_row.addWidget(self.width_spin)
+        wh_row.addSpacing(8)
         wh_row.addWidget(QLabel("H:"))
         wh_row.addWidget(self.height_spin)
         wh_row.addStretch()
@@ -323,7 +318,9 @@ class ADSRParameterCard(QWidget):
 
         # Settings button (centered)
         self.settings_btn = QPushButton("Settings")
-        self.settings_btn.setFixedWidth(80)
+        self.settings_btn.setMinimumWidth(90)
+        self.settings_btn.setMaximumWidth(100)
+        self.settings_btn.setMinimumHeight(28)
         btn_row = QHBoxLayout()
         btn_row.setContentsMargins(0, 0, 0, 0)
         btn_row.addStretch()
