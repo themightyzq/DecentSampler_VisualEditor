@@ -177,10 +177,17 @@ class WaveformWorker(QThread):
                     target_points = self.widget_width // 4
                     target_points = max(40, min(target_points, 200))
                     
+                    # Handle edge cases
+                    if len(samples) == 0:
+                        self.waveform_loaded.emit([1000] * 50)  # Fallback data
+                        return
+                        
                     if len(samples) < target_points * 10:
-                        target_points = len(samples) // 10
+                        target_points = max(10, len(samples) // 10)
                         
                     chunk_size = max(1, len(samples) // target_points)
+                    if chunk_size <= 0:
+                        chunk_size = 1  # Prevent division by zero
                     
                     waveform_data = []
                     for i in range(0, len(samples) - chunk_size, chunk_size):
@@ -227,6 +234,7 @@ class WaveformWidget(QWidget):
         self.worker = None
         self.setMinimumHeight(70)
         self.setMaximumHeight(90)
+        self.setMinimumWidth(200)  # Ensure minimum width for calculations
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.setStyleSheet(f"""
             background-color: {ThemeColors.PRIMARY_BG};
@@ -253,7 +261,9 @@ class WaveformWidget(QWidget):
         self.update()
         
         # Ensure we have a valid widget width for calculations
-        widget_width = self.width() if self.width() > 1 else 400
+        widget_width = max(self.width(), self.minimumWidth(), 200)
+        print(f"DEBUG: Loading waveform for {os.path.basename(file_path)}")
+        print(f"DEBUG: Widget size: {self.width()}x{self.height()}, using width: {widget_width}")
         
         # Start worker thread
         self.worker = WaveformWorker(file_path, widget_width)
@@ -283,7 +293,10 @@ class WaveformWidget(QWidget):
         self.waveform_data = waveform_data
         self.is_loading = False
         self._hide_loading_indicator()
+        print(f"DEBUG: Waveform loaded: {len(waveform_data) if waveform_data else 0} points")
+        # Force immediate repaint
         self.update()
+        self.repaint()  # Ensure immediate visual update
     
     def _on_loading_progress(self, progress):
         """Handle loading progress updates"""

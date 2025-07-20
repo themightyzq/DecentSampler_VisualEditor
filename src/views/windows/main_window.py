@@ -17,6 +17,11 @@ from utils.responsive_layout import AdaptiveLayoutManager, ResponsiveSizingMixin
 from utils.modal_dialogs import show_advanced_settings, show_help_dialog, show_group_tutorial_modal
 from utils.sample_streaming import get_streaming_manager
 from utils.theme_manager import theme_manager, ThemeColors, ThemeSpacing
+
+# Import enhanced UI components
+from utils.enhanced_layout import LayoutGrid, create_section_separator
+from widgets.smart_components import SmartTabWidget, WorkflowPanel, SmartButton
+from utils.enhanced_typography import create_h2_label, create_body_label
 from model import InstrumentPreset, SampleMapping, SampleZone
 import controller
 import os
@@ -182,22 +187,22 @@ class MainWindow(QMainWindow):
         # Tab switching actions
         samples_tab_action = QAction("Samples Tab", self)
         samples_tab_action.setShortcut("Ctrl+1")
-        samples_tab_action.triggered.connect(lambda: self.layout_manager.set_active_tab("samples"))
+        samples_tab_action.triggered.connect(lambda: self.main_tabs.setCurrentIndex(0))
         view_menu.addAction(samples_tab_action)
         
         properties_tab_action = QAction("Properties Tab", self)
         properties_tab_action.setShortcut("Ctrl+2")
-        properties_tab_action.triggered.connect(lambda: self.layout_manager.set_active_tab("properties"))
+        properties_tab_action.triggered.connect(lambda: self.main_tabs.setCurrentIndex(1))
         view_menu.addAction(properties_tab_action)
         
         modulation_tab_action = QAction("Modulation Tab", self)
         modulation_tab_action.setShortcut("Ctrl+3")
-        modulation_tab_action.triggered.connect(lambda: self.layout_manager.set_active_tab("modulation"))
+        modulation_tab_action.triggered.connect(lambda: self.main_tabs.setCurrentIndex(2))
         view_menu.addAction(modulation_tab_action)
         
         groups_tab_action = QAction("Groups Tab", self)
         groups_tab_action.setShortcut("Ctrl+4")
-        groups_tab_action.triggered.connect(lambda: self.layout_manager.set_active_tab("groups"))
+        groups_tab_action.triggered.connect(lambda: self.main_tabs.setCurrentIndex(3))
         view_menu.addAction(groups_tab_action)
         
         # Help menu
@@ -225,32 +230,32 @@ class MainWindow(QMainWindow):
         help_menu.addAction(about_action)
 
     def _create_central(self):
-        # Create responsive layout manager
-        self.layout_manager = AdaptiveLayoutManager()
+        # Create simple enhanced layout without extra panels
+        central_widget = QWidget()
+        main_layout = QHBoxLayout(central_widget)
+        main_layout.setContentsMargins(LayoutGrid.SPACING_MEDIUM, LayoutGrid.SPACING_MEDIUM, 
+                                     LayoutGrid.SPACING_MEDIUM, LayoutGrid.SPACING_MEDIUM)
+        main_layout.setSpacing(LayoutGrid.SPACING_LARGE)
         
-        # Create and setup panels with responsive sizing
+        # Create and setup panels with enhanced layout
         self._create_panels()
-        self._apply_responsive_sizing()
-        self._organize_panels_in_tabs()
+        self._setup_enhanced_layout(main_layout)
         
         # Set as central widget
-        self.setCentralWidget(self.layout_manager)
+        self.setCentralWidget(central_widget)
         
     def _create_panels(self):
         """Create all UI panels with responsive capabilities"""
         # Sample mapping panel (goes in sidebar)
         self.sample_mapping_panel = SampleMappingPanel(self)
-        if isinstance(self.sample_mapping_panel, ResponsiveSizingMixin):
-            self.sample_mapping_panel.apply_responsive_sizing(self.layout_manager)
+        # Sample mapping panel is now handled by enhanced layout system
         
         # Preview canvas (responsive size)
         self.preview_canvas = PreviewCanvas(self)
         # Remove fixed size constraints for responsive design
         self.preview_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        # Set optimal size based on screen size
-        optimal_size = self.layout_manager.get_optimal_widget_size(812, 375)
+        # Set minimum size for responsive design
         self.preview_canvas.setMinimumSize(400, 200)
-        self.preview_canvas.resize(optimal_size)
         
         # Piano keyboard (responsive width)
         self.piano_keyboard = PianoKeyboardWidget(main_window=self)
@@ -285,36 +290,68 @@ class MainWindow(QMainWindow):
             self.group_manager
         ]
         
-        for panel in panels:
-            if hasattr(panel, 'apply_responsive_sizing'):
-                panel.apply_responsive_sizing(self.layout_manager)
+        # Responsive sizing is now handled by enhanced layout components
+        pass
         
-    def _organize_panels_in_tabs(self):
-        """Organize panels into logical workflow tabs"""
-        # Add sample mapping to sidebar
-        sidebar_layout = self.layout_manager.get_sidebar_container()
-        sidebar_layout.addWidget(self.sample_mapping_panel)
+    def _setup_enhanced_layout(self, main_layout):
+        """Setup enhanced layout with smart components"""
+        # Create sidebar with sample mapping panel
+        sidebar_panel = WorkflowPanel("Sample Management", help_text="Import and organize your audio samples")
+        sidebar_panel.set_content(self.sample_mapping_panel)
+        sidebar_panel.setMinimumWidth(LayoutGrid.SIDEBAR_MIN_WIDTH)
+        sidebar_panel.setMaximumWidth(LayoutGrid.SIDEBAR_PREFERRED_WIDTH)
+        main_layout.addWidget(sidebar_panel)
         
-        # Samples tab: Preview + Piano Keyboard + Legend
-        self.layout_manager.add_to_samples_tab(self.preview_canvas)
-        self.layout_manager.add_to_samples_tab(self.piano_keyboard)
+        # Create main content with smart tabs
+        self.main_tabs = SmartTabWidget()
+        
+        # Samples tab with workflow panel
+        samples_layout = QVBoxLayout()
+        
+        # Preview canvas with enhanced styling
+        preview_header = create_h2_label("Instrument Preview")
+        samples_layout.addWidget(preview_header)
+        samples_layout.addWidget(self.preview_canvas)
+        samples_layout.addWidget(create_section_separator())
+        
+        # Piano keyboard with enhanced layout
+        keyboard_header = create_h2_label("Keyboard Mapping")
+        samples_layout.addWidget(keyboard_header)
+        samples_layout.addWidget(self.piano_keyboard)
         
         # Add keyboard legend
         from panels.piano_keyboard import KeyboardLegendWidget
         self.keyboard_legend = KeyboardLegendWidget()
-        self.layout_manager.add_to_samples_tab(self.keyboard_legend)
+        samples_layout.addWidget(self.keyboard_legend)
         
-        # Properties tab: ADSR controls (will show global options in dock)
-        self.layout_manager.add_to_properties_tab(self.group_properties_panel_widget, "adsr")
+        samples_widget = QWidget()
+        samples_widget.setLayout(samples_layout)
         
-        # Modulation tab: Modulation panel
-        self.layout_manager.add_to_modulation_tab(self.modulation_panel)
+        # Add tabs with workflow optimization
+        self.main_tabs.add_workflow_tab(
+            samples_widget, "Main", "🎹", 
+            "Sample visualization and keyboard mapping", "Ctrl+1"
+        )
         
-        # Groups tab: Group manager
-        self.layout_manager.add_to_groups_tab(self.group_manager)
+        # ADSR tab
+        self.main_tabs.add_workflow_tab(
+            self.group_properties_panel_widget, "ADSR", "📈", 
+            "Envelope and dynamics controls", "Ctrl+2"
+        )
         
-        # Set default active tab
-        self.layout_manager.set_active_tab("samples")
+        # Modulation tab
+        self.main_tabs.add_workflow_tab(
+            self.modulation_panel, "Modulation", "🌊", 
+            "LFO and modulation controls", "Ctrl+3"
+        )
+        
+        # Groups tab
+        self.main_tabs.add_workflow_tab(
+            self.group_manager, "Groups", "📁", 
+            "Sample group management", "Ctrl+4"
+        )
+        
+        main_layout.addWidget(self.main_tabs, 2)  # Give main tabs more space
         
         # Connect visual mapping after all components are created
         self._connect_visual_mapping()
@@ -377,25 +414,9 @@ class MainWindow(QMainWindow):
             raise
         self.addDockWidget(Qt.RightDockWidgetArea, self.global_options_panel)
         
-        # Make the options panel responsive
-        screen_info = self.layout_manager.screen_info if hasattr(self, 'layout_manager') else None
-        if screen_info:
-            if self.layout_manager.layout_mode in ["large", "medium"]:
-                # Standard docked panel for larger screens
-                self.global_options_panel.setMinimumWidth(350)
-                self.global_options_panel.setMaximumWidth(500)
-            else:
-                # Narrower panel for smaller screens
-                self.global_options_panel.setMinimumWidth(250)
-                self.global_options_panel.setMaximumWidth(350)
-        else:
-            # Fallback to medium size
-            self.global_options_panel.setMinimumWidth(350)
-            self.global_options_panel.setMaximumWidth(450)
-            
-        # Lock properties panel to prevent undocking on small screens
-        if hasattr(self, 'layout_manager') and self.layout_manager.layout_mode in ["small", "compact"]:
-            self.global_options_panel.setFeatures(self.global_options_panel.NoDockWidgetFeatures)
+        # Set responsive panel sizing
+        self.global_options_panel.setMinimumWidth(350)
+        self.global_options_panel.setMaximumWidth(450)
 
     def _connectSignals(self):
         # Enhanced signal connections with proper error handling
@@ -424,9 +445,7 @@ class MainWindow(QMainWindow):
                 self.piano_keyboard.noteClicked.connect(self._on_keyboard_note_clicked)
                 self.piano_keyboard.mappingHovered.connect(self._on_keyboard_mapping_hovered)
                 
-            # Connect layout manager changes for screen size adaptation
-            if hasattr(self, 'layout_manager'):
-                self.layout_manager.layoutChanged.connect(self._on_layout_changed)
+            # Layout adaptation is now handled by enhanced layout system
                 
         except Exception as e:
             if UI_HELPERS_AVAILABLE:
@@ -438,14 +457,8 @@ class MainWindow(QMainWindow):
         """Handle layout changes when screen size changes"""
         try:
             # Recreate global options panel with new sizing if needed
-            if hasattr(self, 'global_options_panel'):
-                # Update panel sizing based on new layout mode
-                if self.layout_manager.layout_mode in ["large", "medium"]:
-                    self.global_options_panel.setMinimumWidth(350)
-                    self.global_options_panel.setMaximumWidth(500)
-                else:
-                    self.global_options_panel.setMinimumWidth(250)
-                    self.global_options_panel.setMaximumWidth(350)
+            # Panel sizing is now handled by enhanced responsive system
+            pass
                     
             if UI_HELPERS_AVAILABLE:
                 self.status_manager.show_message("Layout adapted to screen size", "info", 2000)

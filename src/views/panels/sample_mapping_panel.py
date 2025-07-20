@@ -9,6 +9,11 @@ from utils.accessibility import (
     get_status_symbol, get_accessible_color
 )
 from widgets.loading_indicators import LoadingOverlay, ProgressButton, CircularProgress
+
+# Import enhanced UI components
+from widgets.smart_components import SmartButton, SmartButtonGroup, ParameterControl
+from utils.enhanced_layout import LayoutGrid, VisualGroup, create_section_separator
+from utils.enhanced_typography import create_h3_label, create_body_label, create_small_label
 import os
 import re
 
@@ -383,56 +388,52 @@ class SampleMappingPanel(QWidget):
         self.hi_spin.valueChanged.connect(self.on_mapping_changed)
         self.root_spin.valueChanged.connect(self.on_mapping_changed)
 
-        # Enhanced import buttons with batch support
-        btn_layout = QHBoxLayout()
-        btn_layout.setContentsMargins(0, 0, 0, 0)
-        btn_layout.setSpacing(8)
+        # Enhanced import buttons using smart components
+        actions_group = VisualGroup("Actions", "subsection")
         
-        # Add button styling to prevent text cutoff - enhanced sizing
-        self.button_style = """
-            QPushButton {
-                min-height: 38px;
-                min-width: 120px;
-                padding: 8px 18px;
-                font-size: 14px;
-                font-weight: 500;
-                text-align: center;
+        # Create smart button group for main actions
+        main_buttons = SmartButtonGroup(orientation=Qt.Horizontal)
+        
+        # Import buttons with enhanced tooltips
+        import_buttons = [
+            {
+                'text': 'Import Files',
+                'type': 'primary',
+                'callback': self.import_samples,
+                'tooltip': 'Import individual sample files (WAV, AIFF, FLAC)'
+            },
+            {
+                'text': 'Import Folder', 
+                'type': 'secondary',
+                'callback': self.import_folder,
+                'tooltip': 'Import all audio files from a folder with smart detection'
+            },
+            {
+                'text': 'Auto-Map',
+                'type': 'secondary', 
+                'callback': self.auto_map_folder,
+                'tooltip': 'Intelligent auto-mapping with note detection:\n• Detects notes from filenames (C4, F#3, etc.)\n• Maps samples to detected notes\n• Fills adjacent keys between samples\n• Groups sample variations for layering'
             }
-        """
+        ]
         
-        import_btn = QPushButton("Import Files")
-        import_btn.setToolTip("Import individual sample files (WAV, AIFF, FLAC)")
-        import_btn.clicked.connect(self.import_samples)
-        import_btn.setStyleSheet(self.button_style)
-        btn_layout.addWidget(import_btn)
+        for btn_config in import_buttons:
+            btn = SmartButton(btn_config['text'], btn_config['type'])
+            btn.setToolTip(btn_config['tooltip'])
+            btn.clicked.connect(btn_config['callback'])
+            main_buttons.add_button(btn)
         
-        batch_btn = QPushButton("Import Folder")
-        batch_btn.setToolTip("Import all audio files from a folder with smart detection")
-        batch_btn.clicked.connect(self.import_folder)
-        batch_btn.setStyleSheet(self.button_style)
-        btn_layout.addWidget(batch_btn)
-        
-        auto_map_btn = QPushButton("Auto-Map")
-        auto_map_btn.setToolTip(
-            "Intelligent auto-mapping with note detection:\n"
-            "• Detects notes from filenames (C4, F#3, etc.)\n"
-            "• Maps samples to detected notes\n"
-            "• Fills adjacent keys between samples\n"
-            "• Groups sample variations for layering"
-        )
-        auto_map_btn.clicked.connect(self.auto_map_folder)
-        auto_map_btn.setStyleSheet(self.button_style)
-        btn_layout.addWidget(auto_map_btn)
-        
-        # Visual mapping controls
-        self.visual_map_btn = QPushButton("Visual Map")
+        # Visual mapping toggle button
+        self.visual_map_btn = SmartButton("Visual Map", "secondary")
         self.visual_map_btn.setToolTip("Enable visual mapping mode - click and drag on piano keyboard to set ranges")
         self.visual_map_btn.setCheckable(True)
         self.visual_map_btn.clicked.connect(self._toggle_visual_mapping)
-        self.visual_map_btn.setStyleSheet(self.button_style)
-        btn_layout.addWidget(self.visual_map_btn)
+        main_buttons.add_button(self.visual_map_btn)
         
-        layout.addLayout(btn_layout)
+        # Add stretch to distribute buttons nicely
+        main_buttons.add_stretch()
+        
+        actions_group.add_widget(main_buttons)
+        layout.addWidget(actions_group)
 
         self.setLayout(layout)
 
@@ -902,6 +903,11 @@ class SampleMappingPanel(QWidget):
                 file_path = mapping.get("path", "")
             else:
                 file_path = getattr(mapping, "path", "")
+            
+            print(f"DEBUG: Selected sample: {os.path.basename(file_path) if file_path else 'None'}")
+            print(f"DEBUG: File exists: {os.path.exists(file_path) if file_path else False}")
+            print(f"DEBUG: Audio preview widget: {self.audio_preview}")
+            print(f"DEBUG: Waveform widget: {getattr(self.audio_preview, 'waveform', None)}")
             
             if file_path and os.path.exists(file_path):
                 self.audio_preview.load_file(file_path)
