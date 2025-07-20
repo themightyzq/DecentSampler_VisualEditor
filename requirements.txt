@@ -1,1 +1,21 @@
+# Core dependencies (required)
 PyQt5>=5.15.0
+
+# Optional dependencies for enhanced features
+# Uncomment the ones you want to install:
+
+# For audio preview and playback
+# pygame>=2.0.0
+
+# For waveform visualization and audio processing
+# numpy>=1.19.0
+
+# For high-quality audio transposition
+# librosa>=0.9.0
+# soundfile>=0.10.0
+
+# For basic audio transposition
+# pydub>=0.25.0
+
+# To install all optional dependencies at once:
+# pip install pygame numpy librosa soundfile pydub

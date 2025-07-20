@@ -76,18 +76,39 @@ def apply_dark_theme(widget):
                 border-color: {UI_CONSTANTS['accent_color']};
             }}
             QCheckBox::indicator {{
-                width: 16px;
-                height: 16px;
+                width: 20px;
+                height: 20px;
+                background-color: rgba(40, 40, 40, 0.8);
+                border: 2px solid #666;
+                border-radius: 4px;
+            }}
+            QCheckBox::indicator:hover {{
+                border-color: #888;
+                background-color: rgba(50, 50, 50, 0.8);
             }}
             QCheckBox::indicator:unchecked {{
-                background-color: {UI_CONSTANTS['secondary_color']};
-                border: 1px solid {UI_CONSTANTS['disabled_color']};
-                border-radius: 2px;
+                background-color: rgba(40, 40, 40, 0.8);
+                border: 2px solid #666;
+                border-radius: 4px;
             }}
             QCheckBox::indicator:checked {{
                 background-color: {UI_CONSTANTS['accent_color']};
-                border: 1px solid {UI_CONSTANTS['accent_color']};
-                border-radius: 2px;
+                border: 2px solid {UI_CONSTANTS['accent_color']};
+                border-radius: 4px;
+            }}
+            QCheckBox::indicator:checked::after {{
+                content: "\u2713";
+                position: absolute;
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                top: -2px;
+                left: 2px;
+            }}
+            QCheckBox {{
+                spacing: 8px;
+                font-size: 14px;
+                color: #f0f0f0;
             }}
             QTabWidget::pane {{
                 border: 1px solid {UI_CONSTANTS['secondary_color']};

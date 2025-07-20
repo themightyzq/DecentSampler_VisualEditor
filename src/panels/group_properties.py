@@ -149,6 +149,12 @@ class GroupPropertiesWidget(QWidget):
     def update_adsr_elements(self):
         """
         Update preset.ui.elements to reflect enabled ADSR cards and their advanced options.
+        
+        NOTE: This panel has exclusive ownership of ADSR UI elements creation.
+        The Project Properties panel filters out ADSR controls to avoid duplication.
+        This ensures a clear separation of concerns:
+        - Group Properties: Manages ADSR envelope values and UI controls
+        - Project Properties: Manages effects controls only
         """
         mw = self.main_window
         if not hasattr(mw, "preset") or not hasattr(mw.preset, "ui") or not hasattr(mw.preset.ui, "elements"):

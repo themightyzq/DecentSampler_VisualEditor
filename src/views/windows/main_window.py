@@ -1,8 +1,10 @@
 from PyQt5.QtWidgets import (
     QMainWindow, QAction, QFileDialog, QMessageBox, QSplitter, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QApplication
 )
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, pyqtSignal, QThread, QTimer
 from PyQt5.QtWidgets import QUndoStack
+from utils.error_handling import ErrorHandler, get_global_error_handler
+from widgets.loading_indicators import LoadingOverlay, ProgressButton
 from views.panels.sample_mapping_panel import SampleMappingPanel
 from views.panels.global_options_panel import GlobalOptionsPanel
 from panels.project_properties import ProjectPropertiesPanel
@@ -13,18 +15,86 @@ from panels.modulation_panel import ModulationPanel
 from panels.group_manager_panel import GroupManagerWidget
 from utils.responsive_layout import AdaptiveLayoutManager, ResponsiveSizingMixin
 from utils.modal_dialogs import show_advanced_settings, show_help_dialog, show_group_tutorial_modal
+from utils.sample_streaming import get_streaming_manager
+from utils.theme_manager import theme_manager, ThemeColors, ThemeSpacing
 from model import InstrumentPreset, SampleMapping, SampleZone
 import controller
 import os
 
 # Import UI helpers for consistency
 try:
-    from utils.ui_helpers import apply_dark_theme, StatusMessageManager, ErrorHandler
+    from utils.ui_helpers import StatusMessageManager, ErrorHandler
     from utils.tooltips import apply_tooltips_to_panel, MAIN_WINDOW_TOOLTIPS, get_workflow_help
     UI_HELPERS_AVAILABLE = True
 except ImportError:
     UI_HELPERS_AVAILABLE = False
     print("Warning: UI helpers not available - using basic styling")
+
+class PresetLoadWorker(QThread):
+    """Background worker for preset loading"""
+    preset_loaded = pyqtSignal(object)  # Loaded preset
+    loading_error = pyqtSignal(str)     # Error message
+    loading_progress = pyqtSignal(str)  # Progress message
+    
+    def __init__(self, file_path):
+        super().__init__()
+        self.file_path = file_path
+        
+    def run(self):
+        """Load preset in background thread"""
+        try:
+            self.loading_progress.emit("Reading preset file...")
+            
+            # Validate file exists and is readable
+            if not os.path.exists(self.file_path):
+                raise FileNotFoundError(f"File not found: {self.file_path}")
+            if not os.access(self.file_path, os.R_OK):
+                raise PermissionError(f"Cannot read file: {self.file_path}")
+            
+            self.loading_progress.emit("Parsing XML data...")
+            
+            # Load the preset
+            preset = controller.load_preset(self.file_path)
+            
+            if not preset:
+                raise ValueError("Invalid preset data")
+            
+            self.loading_progress.emit("Preset loaded successfully")
+            self.preset_loaded.emit(preset)
+            
+        except Exception as e:
+            self.loading_error.emit(str(e))
+
+class PresetSaveWorker(QThread):
+    """Background worker for preset saving"""
+    preset_saved = pyqtSignal(str)      # Success message with file path
+    saving_error = pyqtSignal(str)      # Error message
+    saving_progress = pyqtSignal(str)   # Progress message
+    
+    def __init__(self, file_path, preset):
+        super().__init__()
+        self.file_path = file_path
+        self.preset = preset
+        
+    def run(self):
+        """Save preset in background thread"""
+        try:
+            self.saving_progress.emit("Validating preset data...")
+            
+            # Basic validation
+            if not self.preset:
+                raise ValueError("No preset data to save")
+            
+            self.saving_progress.emit("Generating XML...")
+            
+            # Save the preset
+            controller.save_preset(self.file_path, self.preset)
+            
+            self.saving_progress.emit("Preset saved successfully")
+            self.preset_saved.emit(self.file_path)
+            
+        except Exception as e:
+            self.saving_error.emit(str(e))
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -34,13 +104,23 @@ class MainWindow(QMainWindow):
         self.undo_stack = QUndoStack(self)
         self.preset = None
         
+        # Set up error handling
+        self.error_handler = get_global_error_handler(self)
+        
+        # Initialize streaming manager
+        self.streaming_manager = get_streaming_manager(cache_size_mb=512)
+        
         # Initialize status message manager
         if UI_HELPERS_AVAILABLE:
             self.status_manager = StatusMessageManager(self.statusBar())
         
-        # Apply consistent dark theme
-        if UI_HELPERS_AVAILABLE:
-            apply_dark_theme(self)
+        # Loading workers and overlay
+        self.load_worker = None
+        self.save_worker = None
+        self.loading_overlay = LoadingOverlay(self)
+        
+        # Apply centralized theme - no need for individual theme application
+        # Theme is now applied globally at application level
 
         self._create_menu()
         self._create_central()
@@ -49,6 +129,10 @@ class MainWindow(QMainWindow):
         self._apply_tooltips()
         self.showMaximized()
         self.new_preset()  # Always start with a blank preset
+        
+        # Apply UI fixes after all components are created
+        from utils.ui_fixes import UIFixes
+        UIFixes.apply_all_fixes(self)
         
         # Responsive design - panel sizing handled in _createGlobalOptionsPanel()
         # No fixed width/height constraints needed with responsive layout
@@ -127,6 +211,13 @@ class MainWindow(QMainWindow):
         tutorial_action = QAction("Sample Grouping Tutorial", self)
         tutorial_action.triggered.connect(self.show_group_tutorial)
         help_menu.addAction(tutorial_action)
+        
+        help_menu.addSeparator()
+        
+        # Check dependencies action
+        check_deps_action = QAction("Check Dependencies...", self)
+        check_deps_action.triggered.connect(self.check_dependencies)
+        help_menu.addAction(check_deps_action)
         
         help_menu.addSeparator()
         about_action = QAction("About", self)
@@ -232,9 +323,47 @@ class MainWindow(QMainWindow):
         """Connect visual mapping functionality between piano keyboard and sample panel"""
         try:
             if hasattr(self, 'piano_keyboard') and hasattr(self, 'sample_mapping_panel'):
+                # Ensure the signal isn't already connected to avoid duplicate connections
+                try:
+                    self.piano_keyboard.rangeSelected.disconnect()
+                except TypeError:
+                    # No connections exist yet, which is fine
+                    pass
+                
+                # Connect the signal
                 self.piano_keyboard.rangeSelected.connect(self.sample_mapping_panel._on_range_selected)
+                
+                # Also connect sample selection to update keyboard visualization
+                if hasattr(self.sample_mapping_panel, 'table_widget'):
+                    self.sample_mapping_panel.table_widget.selectionModel().selectionChanged.connect(
+                        self._update_keyboard_visualization
+                    )
+                
+                # Verify the connection was successful
+                if self.piano_keyboard.receivers(self.piano_keyboard.rangeSelected) > 0:
+                    # Connection successful - visual mapping is ready
+                    pass
+                else:
+                    self.error_handler.handle_error(
+                        Exception("Failed to connect visual mapping signal"),
+                        "verifying visual mapping connection",
+                        show_dialog=False
+                    )
+            else:
+                # Log which component is missing for debugging
+                missing = []
+                if not hasattr(self, 'piano_keyboard'):
+                    missing.append('piano_keyboard')
+                if not hasattr(self, 'sample_mapping_panel'):
+                    missing.append('sample_mapping_panel')
+                if missing:
+                    self.error_handler.handle_error(
+                        Exception(f"Missing components: {', '.join(missing)}"),
+                        "setting up visual mapping",
+                        show_dialog=False
+                    )
         except Exception as e:
-            print(f"Warning: Could not connect visual mapping: {e}")
+            self.error_handler.handle_error(e, "connecting visual mapping signals", show_dialog=False)
 
     def _createGlobalOptionsPanel(self):
         def show_error(parent, title, msg):
@@ -303,7 +432,7 @@ class MainWindow(QMainWindow):
             if UI_HELPERS_AVAILABLE:
                 ErrorHandler.handle_validation_error("Signal Connections", e, self)
             else:
-                print(f"Warning: Error connecting signals: {e}")
+                self.error_handler.handle_error(e, "connecting group manager signals", show_dialog=False)
                 
     def _on_layout_changed(self):
         """Handle layout changes when screen size changes"""
@@ -325,7 +454,7 @@ class MainWindow(QMainWindow):
             if UI_HELPERS_AVAILABLE:
                 ErrorHandler.handle_validation_error("Layout Change", e, self)
             else:
-                print(f"Warning: Error handling layout change: {e}")
+                self.error_handler.handle_error(e, "handling layout change", show_dialog=False)
                 
     def _apply_tooltips(self):
         """Apply comprehensive tooltips to all UI elements"""
@@ -351,7 +480,7 @@ class MainWindow(QMainWindow):
                 apply_tooltips_to_panel(self.modulation_panel, 'modulation')
                 
         except Exception as e:
-            print(f"Warning: Error applying tooltips: {e}")
+            self.error_handler.handle_error(e, "applying UI tooltips", show_dialog=False)
             
     def _safe_adsr_update(self, parameter_name):
         """Safely update ADSR with error handling and validation"""
@@ -363,7 +492,7 @@ class MainWindow(QMainWindow):
             if UI_HELPERS_AVAILABLE:
                 ErrorHandler.handle_validation_error(f"ADSR {parameter_name.title()}", e, self)
             else:
-                print(f"Error updating ADSR {parameter_name}: {e}")
+                self.error_handler.handle_error(e, f"updating ADSR {parameter_name}", show_dialog=False)
                 
     def _safe_modulation_update(self):
         """Safely update modulation with error handling"""
@@ -375,7 +504,7 @@ class MainWindow(QMainWindow):
             if UI_HELPERS_AVAILABLE:
                 ErrorHandler.handle_validation_error("Modulation", e, self)
             else:
-                print(f"Error updating modulation: {e}")
+                self.error_handler.handle_error(e, "updating modulation settings", show_dialog=False)
                 
     def _groups_update(self):
         """Update model groups data and preview"""
@@ -392,7 +521,7 @@ class MainWindow(QMainWindow):
             if UI_HELPERS_AVAILABLE:
                 ErrorHandler.handle_validation_error("Sample Groups", e, self)
             else:
-                print(f"Error updating groups: {e}")
+                self.error_handler.handle_error(e, "updating group display", show_dialog=False)
 
     def new_preset(self):
         self.preset = InstrumentPreset("Untitled")
@@ -426,20 +555,29 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
-            
+        
+        # Stop any existing load worker
+        if self.load_worker and self.load_worker.isRunning():
+            self.load_worker.terminate()
+            self.load_worker.wait()
+        
+        # Show loading overlay
+        self.loading_overlay.showWithText("Loading preset...")
+        
+        # Disable UI during loading
+        self.menuBar().setEnabled(False)
+        
+        # Start async loading
+        self.load_worker = PresetLoadWorker(path)
+        self.load_worker.preset_loaded.connect(self._on_preset_loaded)
+        self.load_worker.loading_error.connect(self._on_preset_load_error)
+        self.load_worker.loading_progress.connect(self._on_preset_load_progress)
+        self.load_worker.start()
+    
+    def _on_preset_loaded(self, preset):
+        """Handle successful preset loading"""
         try:
-            # Validate file exists and is readable
-            if not os.path.exists(path):
-                raise FileNotFoundError(f"File not found: {path}")
-            if not os.access(path, os.R_OK):
-                raise PermissionError(f"Cannot read file: {path}")
-                
-            # Load the preset
-            self.preset = controller.load_preset(path)
-            
-            # Validate preset data
-            if not self.preset:
-                raise ValueError("Invalid preset data")
+            self.preset = preset
                 
             # Update UI components safely
             sample_mappings = getattr(self.preset, 'mappings', [])
@@ -464,22 +602,42 @@ class MainWindow(QMainWindow):
             self.group_manager.set_groups(groups)
             
             # Update preview
-            self.preview_canvas.set_preset(self.preset, os.path.dirname(path))
+            self.preview_canvas.set_preset(self.preset, os.path.dirname(self.load_worker.file_path))
             
             # Update keyboard visualization
             self._update_keyboard_visualization()
             
+            # Hide loading overlay and re-enable UI
+            self.loading_overlay.hide()
+            self.menuBar().setEnabled(True)
+            
             # Success feedback
             if UI_HELPERS_AVAILABLE:
-                self.status_manager.show_message(f"Successfully loaded: {os.path.basename(path)}", "success", 3000)
+                self.status_manager.show_message(f"Successfully loaded: {os.path.basename(self.load_worker.file_path)}", "success", 3000)
             else:
-                self.statusBar().showMessage(f"Loaded: {os.path.basename(path)}", 3000)
+                self.statusBar().showMessage(f"Loaded: {os.path.basename(self.load_worker.file_path)}", 3000)
                 
         except Exception as e:
+            # Hide loading overlay and re-enable UI on error
+            self.loading_overlay.hide()
+            self.menuBar().setEnabled(True)
+            
             if UI_HELPERS_AVAILABLE:
-                ErrorHandler.handle_file_error("loading", path, e, self)
+                ErrorHandler.handle_file_error("loading", self.load_worker.file_path, e, self)
             else:
                 QMessageBox.critical(self, "Error Loading Preset", f"Failed to load preset:\n{str(e)}")
+    
+    def _on_preset_load_error(self, error_message):
+        """Handle preset loading errors"""
+        # Hide loading overlay and re-enable UI
+        self.loading_overlay.hide()
+        self.menuBar().setEnabled(True)
+        
+        QMessageBox.critical(self, "Error Loading Preset", f"Failed to load preset:\n{error_message}")
+    
+    def _on_preset_load_progress(self, message):
+        """Handle preset loading progress updates"""
+        self.loading_overlay.label.setText(message)
 
     def save_preset(self):
         """Save preset with comprehensive validation and error handling"""
@@ -516,28 +674,60 @@ class MainWindow(QMainWindow):
             if not path.lower().endswith('.dspreset'):
                 path += '.dspreset'
             
-            # Save with progress indication
-            if UI_HELPERS_AVAILABLE:
-                self.status_manager.show_message("Saving preset...", "info", 0)
-                
-            controller.save_preset(path, self.preset)
+            # Stop any existing save worker
+            if self.save_worker and self.save_worker.isRunning():
+                self.save_worker.terminate()
+                self.save_worker.wait()
             
-            # Update preview with new path
-            self.preview_canvas.set_preset(self.preset, os.path.dirname(path))
+            # Show loading overlay
+            self.loading_overlay.showWithText("Saving preset...")
             
-            # Success feedback
-            if UI_HELPERS_AVAILABLE:
-                self.status_manager.show_message(f"Successfully saved: {os.path.basename(path)}", "success", 3000)
-            else:
-                self.statusBar().showMessage(f"Saved: {os.path.basename(path)}", 3000)
-                
-            QMessageBox.information(self, "Preset Saved", f"Preset saved successfully to:\n{path}")
+            # Disable UI during saving
+            self.menuBar().setEnabled(False)
+            
+            # Start async saving
+            self.save_worker = PresetSaveWorker(path, self.preset)
+            self.save_worker.preset_saved.connect(self._on_preset_saved)
+            self.save_worker.saving_error.connect(self._on_preset_save_error)
+            self.save_worker.saving_progress.connect(self._on_preset_save_progress)
+            self.save_worker.start()
             
         except Exception as e:
+            # Hide loading overlay and re-enable UI on error
+            self.loading_overlay.hide()
+            self.menuBar().setEnabled(True)
+            
             if UI_HELPERS_AVAILABLE:
                 ErrorHandler.handle_file_error("saving", path if 'path' in locals() else "preset", e, self)
             else:
                 QMessageBox.critical(self, "Error Saving Preset", f"Failed to save preset:\n{str(e)}")
+    
+    def _on_preset_saved(self, file_path):
+        """Handle successful preset saving"""
+        # Hide loading overlay and re-enable UI
+        self.loading_overlay.hide()
+        self.menuBar().setEnabled(True)
+        
+        # Update preview with new path
+        self.preview_canvas.set_preset(self.preset, os.path.dirname(file_path))
+        
+        # Success feedback
+        if UI_HELPERS_AVAILABLE:
+            self.status_manager.show_message(f"Successfully saved: {os.path.basename(file_path)}", "success", 3000)
+        else:
+            self.statusBar().showMessage(f"Saved: {os.path.basename(file_path)}", 3000)
+    
+    def _on_preset_save_error(self, error_message):
+        """Handle preset saving errors"""
+        # Hide loading overlay and re-enable UI
+        self.loading_overlay.hide()
+        self.menuBar().setEnabled(True)
+        
+        QMessageBox.critical(self, "Error Saving Preset", f"Failed to save preset:\n{error_message}")
+    
+    def _on_preset_save_progress(self, message):
+        """Handle preset saving progress updates"""
+        self.loading_overlay.label.setText(message)
                 
     def _validate_preset_for_save(self):
         """Validate preset data before saving"""
@@ -610,7 +800,7 @@ class MainWindow(QMainWindow):
                     elif hasattr(m, "path") and hasattr(m, "lo") and hasattr(m, "hi") and hasattr(m, "root"):
                         valid_mappings.append(m)
                 except Exception as e:
-                    print(f"Warning: Skipping invalid mapping: {e}")
+                    self.error_handler.handle_error(e, "validating sample mapping", show_dialog=False)
                     
             self.preset.mappings = valid_mappings
             
@@ -621,7 +811,7 @@ class MainWindow(QMainWindow):
                 self.preset.modulation_routes = routes
                 
         except Exception as e:
-            print(f"Warning: Error updating preset from UI: {e}")
+            self.error_handler.handle_error(e, "updating preset from UI changes", show_dialog=False)
 
     def _set_options_panel_from_preset(self):
         if not self.preset:
@@ -736,7 +926,7 @@ class MainWindow(QMainWindow):
             if UI_HELPERS_AVAILABLE:
                 ErrorHandler.handle_validation_error("Keyboard Note Click", e, self)
             else:
-                print(f"Error handling keyboard note click: {e}")
+                self.error_handler.handle_error(e, "playing sample preview", show_dialog=True)
     
     def _on_keyboard_mapping_hovered(self, mapping_info):
         """Handle keyboard mapping hover events"""
@@ -747,7 +937,7 @@ class MainWindow(QMainWindow):
                 self.status_manager.show_message(f"Hovering over: {sample_name}", "info", 1000)
                 
         except Exception as e:
-            print(f"Error handling keyboard mapping hover: {e}")
+            self.error_handler.handle_error(e, "handling keyboard hover", show_dialog=False)
     
     def _update_keyboard_visualization(self):
         """Update keyboard visual indicators when mappings change"""
@@ -762,4 +952,8 @@ class MainWindow(QMainWindow):
                     self.keyboard_legend.update_legend(legend_items)
                     
         except Exception as e:
-            print(f"Error updating keyboard visualization: {e}")
+            self.error_handler.handle_error(e, "updating keyboard visualization", show_dialog=False)
+    
+    def check_dependencies(self):
+        """Show dialog with dependency check results"""
+        self.error_handler.show_dependency_status()

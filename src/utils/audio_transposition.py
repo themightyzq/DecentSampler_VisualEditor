@@ -9,6 +9,7 @@ import tempfile
 from typing import Optional, Tuple
 from PyQt5.QtMultimedia import QSound, QMediaPlayer, QMediaContent
 from PyQt5.QtCore import QUrl, QTimer, QObject, pyqtSignal
+from utils.error_handling import ErrorHandler, with_error_handling
 
 try:
     import librosa
@@ -38,6 +39,7 @@ class TranspositionEngine(QObject):
         self.temp_files = []  # Track temporary files for cleanup
         self.current_player = None
         self.method = self._detect_best_method()
+        self.error_handler = ErrorHandler(parent)
         
     def _detect_best_method(self):
         """Detect the best available transposition method"""
@@ -106,8 +108,7 @@ class TranspositionEngine(QObject):
         elif self.method == "pydub":
             return self._play_with_pydub(sample_path, pitch_ratio, volume)
         else:
-            # Fallback: play without transposition but show info
-            print(f"Transposition needed: {self.calculate_semitone_difference(played_note, root_note)} semitones")
+            # Fallback: play without transposition
             return self._play_direct(sample_path, volume)
     
     def _play_direct(self, sample_path: str, volume: float = 1.0) -> bool:
@@ -116,11 +117,19 @@ class TranspositionEngine(QObject):
             QSound.play(sample_path)
             return True
         except Exception as e:
-            print(f"Error playing sample: {e}")
+            self.error_handler.handle_error(e, "playing sample directly", show_dialog=True)
             return False
     
     def _play_with_librosa(self, sample_path: str, pitch_ratio: float, volume: float = 1.0) -> bool:
         """Play sample with librosa transposition (highest quality)"""
+        if not LIBROSA_AVAILABLE:
+            self.error_handler.handle_error(
+                ImportError("librosa is required for high-quality pitch shifting"),
+                "transposing audio",
+                show_dialog=True
+            )
+            return False
+            
         try:
             # Load audio file
             y, sr = librosa.load(sample_path, sr=None)
@@ -144,12 +153,20 @@ class TranspositionEngine(QObject):
                 return True
                 
         except Exception as e:
-            print(f"Error with librosa transposition: {e}")
+            self.error_handler.handle_error(e, "applying pitch shift with librosa", show_dialog=True)
             
         return False
     
     def _play_with_pydub(self, sample_path: str, pitch_ratio: float, volume: float = 1.0) -> bool:
         """Play sample with pydub transposition (medium quality)"""
+        if not PYDUB_AVAILABLE:
+            self.error_handler.handle_error(
+                ImportError("pydub is required for basic pitch shifting"),
+                "transposing audio",
+                show_dialog=True
+            )
+            return False
+            
         try:
             # Load audio with pydub
             audio = AudioSegment.from_file(sample_path)
@@ -179,13 +196,15 @@ class TranspositionEngine(QObject):
                 return True
                 
         except Exception as e:
-            print(f"Error with pydub transposition: {e}")
+            self.error_handler.handle_error(e, "applying pitch shift with pydub", show_dialog=True)
             
         return False
     
     def _create_temp_file(self, audio_data: np.ndarray, sample_rate: int) -> Optional[str]:
         """Create temporary audio file from numpy array"""
         try:
+            import soundfile as sf
+            
             # Create temporary file
             temp_fd, temp_path = tempfile.mkstemp(suffix='.wav')
             os.close(temp_fd)
@@ -198,8 +217,15 @@ class TranspositionEngine(QObject):
             
             return temp_path
             
+        except ImportError:
+            self.error_handler.handle_error(
+                ImportError("soundfile is required for saving temporary audio files"),
+                "creating temporary audio file",
+                show_dialog=False
+            )
+            return None
         except Exception as e:
-            print(f"Error creating temp file: {e}")
+            self.error_handler.handle_error(e, "creating temporary audio file", show_dialog=False)
             return None
     
     def _create_temp_file_pydub(self, audio: AudioSegment) -> Optional[str]:
@@ -218,7 +244,7 @@ class TranspositionEngine(QObject):
             return temp_path
             
         except Exception as e:
-            print(f"Error creating temp file: {e}")
+            self.error_handler.handle_error(e, "creating temporary audio file", show_dialog=False)
             return None
     
     def cleanup_temp_files(self):
@@ -228,7 +254,8 @@ class TranspositionEngine(QObject):
                 if os.path.exists(temp_file):
                     os.remove(temp_file)
             except Exception as e:
-                print(f"Error cleaning up temp file {temp_file}: {e}")
+                # Silently log cleanup errors - they're not critical
+                pass
         
         self.temp_files.clear()
     

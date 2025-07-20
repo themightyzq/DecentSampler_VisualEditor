@@ -1,41 +1,43 @@
 """
 UI Consistency and Styling Module
 Provides consistent styling across all panels and controls
+Now integrated with the centralized theme system
 """
 
 from PyQt5.QtWidgets import QLabel, QWidget
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
+from .theme_manager import ThemeColors, ThemeFonts, ThemeSpacing, theme_manager
 
 class UIConstants:
-    """Constants for consistent UI styling"""
+    """Constants for consistent UI styling - now references theme system"""
     
     # Header styling
-    HEADER_FONT_SIZE = 14
-    HEADER_FONT_WEIGHT = "bold"
-    HEADER_COLOR = "#f0f0f0"
-    HEADER_MARGIN_BOTTOM = 8
+    HEADER_FONT_SIZE = ThemeFonts.SIZE_H2
+    HEADER_FONT_WEIGHT = str(ThemeFonts.WEIGHT_BOLD)
+    HEADER_COLOR = ThemeColors.TEXT_PRIMARY
+    HEADER_MARGIN_BOTTOM = ThemeSpacing.SPACING_MEDIUM
     
     # Subheader styling  
-    SUBHEADER_FONT_SIZE = 12
-    SUBHEADER_FONT_WEIGHT = "600"
-    SUBHEADER_COLOR = "#d0d0d0"
+    SUBHEADER_FONT_SIZE = ThemeFonts.SIZE_H3
+    SUBHEADER_FONT_WEIGHT = str(ThemeFonts.WEIGHT_SEMIBOLD)
+    SUBHEADER_COLOR = ThemeColors.TEXT_PRIMARY
     
     # Body text
-    BODY_FONT_SIZE = 11
-    BODY_COLOR = "#c0c0c0"
+    BODY_FONT_SIZE = ThemeFonts.SIZE_SMALL
+    BODY_COLOR = ThemeColors.TEXT_SECONDARY
     
     # Button styling
-    BUTTON_HEIGHT = 28
-    BUTTON_FONT_SIZE = 11
+    BUTTON_HEIGHT = ThemeSpacing.HEIGHT_BUTTON
+    BUTTON_FONT_SIZE = ThemeFonts.SIZE_SMALL
     
     # Input styling
-    INPUT_HEIGHT = 24
-    INPUT_FONT_SIZE = 11
+    INPUT_HEIGHT = ThemeSpacing.HEIGHT_INPUT
+    INPUT_FONT_SIZE = ThemeFonts.SIZE_SMALL
     
     # Panel spacing
-    PANEL_MARGIN = 8
-    PANEL_SPACING = 6
+    PANEL_MARGIN = ThemeSpacing.SPACING_MEDIUM
+    PANEL_SPACING = ThemeSpacing.SPACING_SMALL + 2
     
     # Resolution breakpoints
     BREAKPOINT_SMALL = 1400
@@ -49,15 +51,7 @@ class UIStyler:
     def create_header_label(text: str, tooltip: str = "") -> QLabel:
         """Create a consistently styled header label"""
         label = QLabel(text)
-        label.setStyleSheet(f"""
-            QLabel {{
-                font-size: {UIConstants.HEADER_FONT_SIZE}px;
-                font-weight: {UIConstants.HEADER_FONT_WEIGHT};
-                color: {UIConstants.HEADER_COLOR};
-                margin-bottom: {UIConstants.HEADER_MARGIN_BOTTOM}px;
-                padding: 4px 0px;
-            }}
-        """)
+        label.setProperty("heading", "h2")
         if tooltip:
             label.setToolTip(tooltip)
         return label
@@ -66,15 +60,7 @@ class UIStyler:
     def create_subheader_label(text: str, tooltip: str = "") -> QLabel:
         """Create a consistently styled subheader label"""
         label = QLabel(text)
-        label.setStyleSheet(f"""
-            QLabel {{
-                font-size: {UIConstants.SUBHEADER_FONT_SIZE}px;
-                font-weight: {UIConstants.SUBHEADER_FONT_WEIGHT};
-                color: {UIConstants.SUBHEADER_COLOR};
-                margin-bottom: 4px;
-                padding: 2px 0px;
-            }}
-        """)
+        label.setProperty("heading", "h3")
         if tooltip:
             label.setToolTip(tooltip)
         return label
@@ -83,12 +69,7 @@ class UIStyler:
     def create_body_label(text: str, tooltip: str = "") -> QLabel:
         """Create a consistently styled body text label"""
         label = QLabel(text)
-        label.setStyleSheet(f"""
-            QLabel {{
-                font-size: {UIConstants.BODY_FONT_SIZE}px;
-                color: {UIConstants.BODY_COLOR};
-            }}
-        """)
+        label.setProperty("secondary", "true")
         if tooltip:
             label.setToolTip(tooltip)
         return label

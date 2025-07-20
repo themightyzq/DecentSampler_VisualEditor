@@ -184,19 +184,19 @@ class AdaptiveLayoutManager(QWidget):
         """Setup the main workflow tabs"""
         # Tab 1: Core Editing (Samples + Preview + Keyboard)
         samples_tab = self.create_samples_tab()
-        self.workflow_tabs.addTab(samples_tab, "📝 Samples")
+        self.workflow_tabs.addTab(samples_tab, "Main")
         
         # Tab 2: Properties (ADSR + Global Options)  
         properties_tab = self.create_properties_tab()
-        self.workflow_tabs.addTab(properties_tab, "⚙️ Properties")
+        self.workflow_tabs.addTab(properties_tab, "ADSR")
         
         # Tab 3: Modulation (LFOs + Routes)
         modulation_tab = self.create_modulation_tab()
-        self.workflow_tabs.addTab(modulation_tab, "🌊 Modulation")
+        self.workflow_tabs.addTab(modulation_tab, "Modulation")
         
         # Tab 4: Groups (Sample Grouping)
         groups_tab = self.create_groups_tab()
-        self.workflow_tabs.addTab(groups_tab, "📁 Groups")
+        self.workflow_tabs.addTab(groups_tab, "Groups")
         
     def create_samples_tab(self):
         """Create the main samples editing tab"""
@@ -327,6 +327,12 @@ class AdaptiveLayoutManager(QWidget):
         
     def get_tab_by_name(self, name):
         """Get a specific tab by its name"""
+        # Handle the mapping of "samples" to "Main" tab
+        if name.lower() == "samples":
+            name = "main"
+        elif name.lower() == "properties":
+            name = "adsr"
+            
         for i in range(self.workflow_tabs.count()):
             if name.lower() in self.workflow_tabs.tabText(i).lower():
                 return self.workflow_tabs.widget(i)
@@ -336,7 +342,20 @@ class AdaptiveLayoutManager(QWidget):
         """Add widget to samples tab"""
         samples_tab = self.get_tab_by_name("samples")
         if samples_tab and hasattr(samples_tab, 'content_layout'):
-            samples_tab.content_layout.addWidget(widget)
+            # Center the preview canvas widget
+            if widget.__class__.__name__ == 'PreviewCanvas':
+                # Create a horizontal layout to center the canvas
+                h_layout = QHBoxLayout()
+                h_layout.addStretch()
+                h_layout.addWidget(widget)
+                h_layout.addStretch()
+                
+                # Create a container widget for the centered layout
+                container = QWidget()
+                container.setLayout(h_layout)
+                samples_tab.content_layout.addWidget(container)
+            else:
+                samples_tab.content_layout.addWidget(widget)
             
     def add_to_properties_tab(self, widget, section="main"):
         """Add widget to properties tab"""

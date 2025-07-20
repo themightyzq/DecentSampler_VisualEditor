@@ -1,8 +1,14 @@
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QLineEdit, QPushButton, QFormLayout, QSpinBox, QFileDialog, QHBoxLayout, QProgressBar, QFrame
+    QWidget, QVBoxLayout, QLabel, QTableWidget, QTableWidgetItem, QLineEdit, QPushButton, QFormLayout, QSpinBox, QFileDialog, QHBoxLayout, QProgressBar, QFrame, QApplication
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QMimeData
-from PyQt5.QtGui import QDragEnterEvent, QDropEvent
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QMimeData, QSize
+from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QPainter, QColor, QBrush, QPen, QIcon
+from utils.error_handling import ErrorHandler, with_error_handling
+from utils.accessibility import (
+    AccessibilityIndicator, AccessibilitySymbol, accessibility_settings,
+    get_status_symbol, get_accessible_color
+)
+from widgets.loading_indicators import LoadingOverlay, ProgressButton, CircularProgress
 import os
 import re
 
@@ -19,6 +25,23 @@ class SmartFileDetector:
     NOTE_PATTERNS = [
         r'([ABCDEFG][#b]?)(\d+)',  # Standard notation: C4, F#3, Bb2
         r'([ABCDEFG])([#b]?)(\d+)',  # Separated: C#4, Bb3
+        r'_([ABCDEFG][#b]?)(\d+)',  # Underscore prefix: _C4, _F#3
+        r'-([ABCDEFG][#b]?)(\d+)',  # Dash prefix: -C4, -F#3
+        r'\.([ABCDEFG][#b]?)(\d+)',  # Dot prefix: .C4, .F#3
+    ]
+    
+    # Velocity patterns
+    VELOCITY_PATTERNS = [
+        (r'_pp', (1, 31)),      # Pianissimo
+        (r'_p', (32, 63)),      # Piano
+        (r'_mp', (64, 79)),     # Mezzo-piano
+        (r'_mf', (80, 95)),     # Mezzo-forte
+        (r'_f', (96, 111)),     # Forte
+        (r'_ff', (112, 127)),   # Fortissimo
+        (r'_soft', (1, 63)),    # Soft
+        (r'_medium', (64, 95)), # Medium
+        (r'_hard', (96, 127)),  # Hard
+        (r'v(\d+)', None),      # Velocity number: v100, v64
     ]
     
     # MIDI note mapping
@@ -56,6 +79,27 @@ class SmartFileDetector:
         return None
     
     @staticmethod
+    def detect_velocity_range(filename):
+        """Detect velocity range from filename. Returns (low, high) or None."""
+        base_name = os.path.basename(filename)
+        
+        for pattern, velocity_range in SmartFileDetector.VELOCITY_PATTERNS:
+            if pattern.startswith('v'):
+                # Handle velocity number pattern
+                match = re.search(pattern, base_name, re.IGNORECASE)
+                if match:
+                    vel = int(match.group(1))
+                    # Create a range around the velocity value
+                    vel_range = 16  # ±16 velocity units
+                    return (max(1, vel - vel_range), min(127, vel + vel_range))
+            else:
+                # Handle named velocity patterns
+                if re.search(pattern, base_name, re.IGNORECASE):
+                    return velocity_range
+        
+        return None  # No velocity information found
+    
+    @staticmethod
     def suggest_mapping_range(root_note, filename):
         """Suggest appropriate mapping range based on root note and filename."""
         if root_note is None:
@@ -71,15 +115,50 @@ class SmartFileDetector:
             range_size = 12  # Full octave for keyboard instruments
         elif any(word in base_name for word in ['string', 'violin', 'cello']):
             range_size = 24  # Two octaves for strings
-        elif any(word in base_name for word in ['kick', 'snare', 'hat', 'drum']):
-            range_size = 2   # Small range for drums
+        elif any(word in base_name for word in ['kick', 'snare', 'hat', 'drum', 'perc']):
+            range_size = 0   # Single note for drums/percussion
         elif any(word in base_name for word in ['bass', 'low']):
             range_size = 8   # Moderate range for bass
+        elif any(word in base_name for word in ['pad', 'synth']):
+            range_size = 12  # Full octave for synth sounds
         
         lo_note = max(0, root_note - range_size)
         hi_note = min(127, root_note + range_size)
         
         return lo_note, hi_note, root_note
+    
+    @staticmethod
+    def analyze_sample_group(filenames):
+        """Analyze a group of filenames to detect patterns and suggest grouping."""
+        # Detect if samples are related (same instrument, different notes/velocities)
+        common_prefix = os.path.commonprefix([os.path.basename(f) for f in filenames])
+        
+        # Group by detected notes
+        note_groups = {}
+        velocity_groups = {}
+        
+        for filename in filenames:
+            root_note = SmartFileDetector.detect_root_note(filename)
+            velocity_range = SmartFileDetector.detect_velocity_range(filename)
+            
+            if root_note is not None:
+                if root_note not in note_groups:
+                    note_groups[root_note] = []
+                note_groups[root_note].append(filename)
+            
+            if velocity_range is not None:
+                vel_key = f"{velocity_range[0]}-{velocity_range[1]}"
+                if vel_key not in velocity_groups:
+                    velocity_groups[vel_key] = []
+                velocity_groups[vel_key].append(filename)
+        
+        return {
+            'common_prefix': common_prefix,
+            'note_groups': note_groups,
+            'velocity_groups': velocity_groups,
+            'has_velocity_layers': len(velocity_groups) > 1,
+            'has_note_layers': len(note_groups) > 1
+        }
 
 class BatchImportWorker(QThread):
     """Background worker for batch sample import with progress updates"""
@@ -98,14 +177,18 @@ class BatchImportWorker(QThread):
             mappings = []
             total_files = len(self.file_paths)
             
+            # First analyze the group to detect patterns
+            group_analysis = SmartFileDetector.analyze_sample_group(self.file_paths)
+            
             for i, file_path in enumerate(self.file_paths):
                 # Update progress
                 progress = int((i / total_files) * 100)
                 filename = os.path.basename(file_path)
                 self.progress_updated.emit(progress, f"Processing: {filename}")
                 
-                # Detect root note
+                # Detect root note and velocity
                 root_note = SmartFileDetector.detect_root_note(file_path)
+                velocity_range = SmartFileDetector.detect_velocity_range(file_path)
                 lo_note, hi_note, final_root = SmartFileDetector.suggest_mapping_range(root_note, file_path)
                 
                 # Create mapping
@@ -114,13 +197,16 @@ class BatchImportWorker(QThread):
                     "lo": lo_note,
                     "hi": hi_note,
                     "root": final_root,
-                    "auto_detected": root_note is not None
+                    "auto_detected": root_note is not None,
+                    "velocity_range": velocity_range if velocity_range else (0, 127),
+                    "velocity_detected": velocity_range is not None
                 }
                 mappings.append(mapping)
                 
                 # Small delay to prevent UI freezing
                 self.msleep(10)
             
+            # Add group analysis to results
             self.progress_updated.emit(100, f"Completed: {total_files} files processed")
             self.import_completed.emit(mappings)
             
@@ -134,9 +220,17 @@ class SampleMappingPanel(QWidget):
         self.samples = []
         self.current_mapping = None
         self.batch_import_worker = None
+        self.error_handler = ErrorHandler(self)
+        
+        # Accessibility settings
+        self.accessibility_enabled = accessibility_settings.colorblind_mode
+        self.accessibility_indicator = accessibility_settings.get_indicator_factory()
         
         # Enable drag and drop
         self.setAcceptDrops(True)
+        
+        # Create loading overlay
+        self.loading_overlay = LoadingOverlay(self)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(8, 8, 8, 8)
@@ -190,12 +284,27 @@ class SampleMappingPanel(QWidget):
         layout.addWidget(self.progress_bar)
 
         self.table_widget = QTableWidget()
-        self.table_widget.setColumnCount(3)
-        self.table_widget.setHorizontalHeaderLabels(["Filename", "Key Range (root)", "Status"])
+        if self.accessibility_enabled:
+            self.table_widget.setColumnCount(4)
+            self.table_widget.setHorizontalHeaderLabels(["Indicator", "Filename", "Key Range (root)", "Status"])
+        else:
+            self.table_widget.setColumnCount(3)
+            self.table_widget.setHorizontalHeaderLabels(["Filename", "Key Range (root)", "Status"])
+        
         self.table_widget.setSelectionBehavior(self.table_widget.SelectRows)
         self.table_widget.setEditTriggers(self.table_widget.NoEditTriggers)
         self.table_widget.setToolTip("List of imported samples. Select to edit mapping.")
         self.table_widget.horizontalHeader().setStretchLastSection(True)
+        
+        # Set column widths with better sizing for text visibility
+        if self.accessibility_enabled:
+            self.table_widget.setColumnWidth(0, 60)  # Indicator column - increased
+            # Set minimum section sizes to prevent text cutoff
+            self.table_widget.horizontalHeader().setMinimumSectionSize(80)
+        else:
+            # Set minimum section sizes for non-accessibility mode
+            self.table_widget.horizontalHeader().setMinimumSectionSize(100)
+        
         layout.addWidget(self.table_widget)
         
         # Audio preview widget
@@ -216,16 +325,16 @@ class SampleMappingPanel(QWidget):
             }
             QLabel {
                 color: #f0f0f0;
-                font-size: 16px;
+                font-size: 14px;
                 font-weight: 600;
-                min-width: 110px;
-                padding-right: 12px;
+                min-width: 85px;
+                padding-right: 8px;
             }
             QSpinBox {
                 color: #f0f0f0;
-                font-size: 16px;
-                min-width: 70px;
-                min-height: 32px;
+                font-size: 14px;
+                min-width: 80px;
+                min-height: 28px;
                 background: #181818;
                 border: 1px solid #444;
                 border-radius: 4px;
@@ -279,17 +388,31 @@ class SampleMappingPanel(QWidget):
         btn_layout.setContentsMargins(0, 0, 0, 0)
         btn_layout.setSpacing(8)
         
+        # Add button styling to prevent text cutoff - enhanced sizing
+        self.button_style = """
+            QPushButton {
+                min-height: 38px;
+                min-width: 120px;
+                padding: 8px 18px;
+                font-size: 14px;
+                font-weight: 500;
+                text-align: center;
+            }
+        """
+        
         import_btn = QPushButton("Import Files")
         import_btn.setToolTip("Import individual sample files (WAV, AIFF, FLAC)")
         import_btn.clicked.connect(self.import_samples)
+        import_btn.setStyleSheet(self.button_style)
         btn_layout.addWidget(import_btn)
         
         batch_btn = QPushButton("Import Folder")
         batch_btn.setToolTip("Import all audio files from a folder with smart detection")
         batch_btn.clicked.connect(self.import_folder)
+        batch_btn.setStyleSheet(self.button_style)
         btn_layout.addWidget(batch_btn)
         
-        auto_map_btn = QPushButton("Smart Auto-Map")
+        auto_map_btn = QPushButton("Auto-Map")
         auto_map_btn.setToolTip(
             "Intelligent auto-mapping with note detection:\n"
             "• Detects notes from filenames (C4, F#3, etc.)\n"
@@ -298,6 +421,7 @@ class SampleMappingPanel(QWidget):
             "• Groups sample variations for layering"
         )
         auto_map_btn.clicked.connect(self.auto_map_folder)
+        auto_map_btn.setStyleSheet(self.button_style)
         btn_layout.addWidget(auto_map_btn)
         
         # Visual mapping controls
@@ -305,6 +429,7 @@ class SampleMappingPanel(QWidget):
         self.visual_map_btn.setToolTip("Enable visual mapping mode - click and drag on piano keyboard to set ranges")
         self.visual_map_btn.setCheckable(True)
         self.visual_map_btn.clicked.connect(self._toggle_visual_mapping)
+        self.visual_map_btn.setStyleSheet(self.button_style)
         btn_layout.addWidget(self.visual_map_btn)
         
         layout.addLayout(btn_layout)
@@ -314,6 +439,10 @@ class SampleMappingPanel(QWidget):
         self.table_widget.selectionModel().selectionChanged.connect(self.on_table_selection_changed)
         
         # Visual mapping connection will be established in main window after all components are created
+        
+        # Show helpful hint after a short delay
+        from PyQt5.QtCore import QTimer
+        QTimer.singleShot(1000, self._show_import_hint)
     
     def _toggle_visual_mapping(self, checked):
         """Toggle visual mapping mode"""
@@ -322,7 +451,21 @@ class SampleMappingPanel(QWidget):
             
             if checked:
                 self.visual_map_btn.setText("Exit Visual Map")
-                self.visual_map_btn.setStyleSheet("background-color: #4a7c59; color: white;")
+                self.visual_map_btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #4a7c59;
+                        color: white;
+                        min-height: 38px;
+                        min-width: 140px;
+                        padding: 8px 18px;
+                        font-size: 14px;
+                        font-weight: 500;
+                        text-align: center;
+                    }
+                    QPushButton:hover {
+                        background-color: #5a8c69;
+                    }
+                """)
                 
                 # Show helpful status message
                 if hasattr(self.main_window, 'statusBar'):
@@ -332,7 +475,7 @@ class SampleMappingPanel(QWidget):
                     )
             else:
                 self.visual_map_btn.setText("Visual Map")
-                self.visual_map_btn.setStyleSheet("")
+                self.visual_map_btn.setStyleSheet(self.button_style)
                 self.main_window.piano_keyboard.clear_range_selection()
                 
                 if hasattr(self.main_window, 'statusBar'):
@@ -396,6 +539,38 @@ class SampleMappingPanel(QWidget):
         octave = (n // 12) - 1
         note = names[n % 12]
         return f"{note}{octave}"
+    
+    def _create_mapping_indicator_icon(self, mapping_index):
+        """Create a visual indicator icon for a mapping"""
+        if not self.accessibility_enabled:
+            return None
+        
+        # Create a small pixmap with pattern and symbol
+        pixmap = QPixmap(32, 16)
+        pixmap.fill(Qt.transparent)
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        
+        # Get accessibility indicator components
+        color, brush, symbol = self.accessibility_indicator.create_mapping_indicator(mapping_index)
+        
+        # Draw pattern background
+        painter.setBrush(brush)
+        painter.setPen(Qt.NoPen)
+        painter.drawRect(pixmap.rect())
+        
+        # Draw symbol if available
+        if symbol:
+            painter.setPen(QPen(QColor("#FFFFFF"), 1))
+            font = painter.font()
+            font.setPixelSize(12)
+            font.setBold(True)
+            painter.setFont(font)
+            painter.drawText(pixmap.rect(), Qt.AlignCenter, symbol)
+        
+        painter.end()
+        return QIcon(pixmap)
     
     def _extract_mapping_info(self, mapping):
         """Extract lo, hi, root, path from mapping object or dict"""
@@ -510,6 +685,15 @@ class SampleMappingPanel(QWidget):
                 file_path = os.path.join(root, file)
                 if self._is_audio_file(file_path):
                     audio_files.append(file_path)
+        
+        # Sort files naturally (handle numeric sequences properly)
+        def natural_sort_key(path):
+            import re
+            def convert(text):
+                return int(text) if text.isdigit() else text.lower()
+            return [convert(c) for c in re.split('([0-9]+)', os.path.basename(path))]
+        
+        audio_files.sort(key=natural_sort_key)
         return audio_files
 
     def _start_batch_import(self, file_paths):
@@ -517,8 +701,17 @@ class SampleMappingPanel(QWidget):
         if self.batch_import_worker and self.batch_import_worker.isRunning():
             return  # Already running
         
+        # Show loading overlay for large batches
+        if len(file_paths) > 10:
+            self.loading_overlay.showWithText(f"Importing {len(file_paths)} files...")
+        
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
+        
+        # Disable UI elements during import
+        self.table_widget.setEnabled(False)
+        for child in self.findChildren(QPushButton):
+            child.setEnabled(False)
         
         # Create and start worker thread
         self.batch_import_worker = BatchImportWorker(file_paths)
@@ -535,7 +728,14 @@ class SampleMappingPanel(QWidget):
     
     def _on_import_completed(self, mappings):
         """Handle completed batch import"""
+        # Hide loading indicators
         self.progress_bar.setVisible(False)
+        self.loading_overlay.hide()
+        
+        # Re-enable UI elements
+        self.table_widget.setEnabled(True)
+        for child in self.findChildren(QPushButton):
+            child.setEnabled(True)
         
         # Add new mappings to existing samples
         for mapping in mappings:
@@ -559,7 +759,15 @@ class SampleMappingPanel(QWidget):
     
     def _on_import_error(self, error_message):
         """Handle import errors"""
+        # Hide loading indicators
         self.progress_bar.setVisible(False)
+        self.loading_overlay.hide()
+        
+        # Re-enable UI elements
+        self.table_widget.setEnabled(True)
+        for child in self.findChildren(QPushButton):
+            child.setEnabled(True)
+        
         if hasattr(self.main_window, 'statusBar'):
             self.main_window.statusBar().showMessage(f"Import error: {error_message}", 5000)
     
@@ -588,7 +796,11 @@ class SampleMappingPanel(QWidget):
                 QTimer.singleShot(100, self._perform_intelligent_mapping)
                 
         except Exception as e:
-            print(f"Error offering intelligent mapping: {e}")
+            self.error_handler.handle_error(
+                e,
+                "analyzing samples for intelligent mapping",
+                show_dialog=True
+            )
 
     def set_samples(self, samples):
         # Always store SampleMapping objects for bulletproof consistency
@@ -617,18 +829,37 @@ class SampleMappingPanel(QWidget):
             filename = path.split("/")[-1] if path else ""
             key_range = f"{midi_note_name(lo)}–{midi_note_name(hi)} (root {midi_note_name(root)})"
             
-            # Status indicator
+            # Status indicator with accessibility symbols
             if hasattr(mapping_obj, 'auto_detected') and mapping_obj.auto_detected:
-                status = "✓ Auto-detected"
+                if self.accessibility_enabled:
+                    status_symbol = get_status_symbol("success")
+                    status = f"{status_symbol} Auto-detected"
+                else:
+                    status = "✓ Auto-detected"
             else:
                 status = "Manual"
             
             row = self.table_widget.rowCount()
             self.table_widget.insertRow(row)
-            self.table_widget.setItem(row, 0, QTableWidgetItem(filename))
-            self.table_widget.setItem(row, 1, QTableWidgetItem(key_range))
-            self.table_widget.setItem(row, 2, QTableWidgetItem(status))
-            self.table_widget.setRowHeight(row, 24)
+            
+            if self.accessibility_enabled:
+                # Add visual indicator in first column
+                indicator_icon = self._create_mapping_indicator_icon(len(self.samples) - 1)
+                indicator_item = QTableWidgetItem()
+                if indicator_icon:
+                    indicator_item.setIcon(indicator_icon)
+                self.table_widget.setItem(row, 0, indicator_item)
+                
+                # Shift other columns
+                self.table_widget.setItem(row, 1, QTableWidgetItem(filename))
+                self.table_widget.setItem(row, 2, QTableWidgetItem(key_range))
+                self.table_widget.setItem(row, 3, QTableWidgetItem(status))
+            else:
+                self.table_widget.setItem(row, 0, QTableWidgetItem(filename))
+                self.table_widget.setItem(row, 1, QTableWidgetItem(key_range))
+                self.table_widget.setItem(row, 2, QTableWidgetItem(status))
+            
+            self.table_widget.setRowHeight(row, 28 if self.accessibility_enabled else 24)
         self.set_mapping(None)
 
     def set_mapping(self, mapping):
@@ -712,9 +943,22 @@ class SampleMappingPanel(QWidget):
                 filename = path.split("/")[-1] if path else ""
                 key_range = f"{midi_note_name(lo)}–{midi_note_name(hi)} (root {midi_note_name(root)})"
                 status = "Manual"
-            self.table_widget.setItem(idx, 0, QTableWidgetItem(filename))
-            self.table_widget.setItem(idx, 1, QTableWidgetItem(key_range))
-            self.table_widget.setItem(idx, 2, QTableWidgetItem(status))
+            
+            # Update table items considering accessibility columns
+            if self.accessibility_enabled:
+                # Update indicator icon
+                indicator_icon = self._create_mapping_indicator_icon(idx)
+                indicator_item = self.table_widget.item(idx, 0)
+                if indicator_item and indicator_icon:
+                    indicator_item.setIcon(indicator_icon)
+                
+                self.table_widget.setItem(idx, 1, QTableWidgetItem(filename))
+                self.table_widget.setItem(idx, 2, QTableWidgetItem(key_range))
+                self.table_widget.setItem(idx, 3, QTableWidgetItem(status))
+            else:
+                self.table_widget.setItem(idx, 0, QTableWidgetItem(filename))
+                self.table_widget.setItem(idx, 1, QTableWidgetItem(key_range))
+                self.table_widget.setItem(idx, 2, QTableWidgetItem(status))
             # Live update preview
             if hasattr(self.main_window, "preview_canvas") and hasattr(self.main_window, "preset"):
                 self.main_window.preview_canvas.set_preset(self.main_window.preset, "")
@@ -778,12 +1022,16 @@ class SampleMappingPanel(QWidget):
         try:
             from utils.intelligent_mapping import SampleAnalyzer, SampleGrouper, IntelligentMappingDialog
             
-            # Show progress
-            if hasattr(self.main_window, 'statusBar'):
-                self.main_window.statusBar().showMessage("Analyzing samples for intelligent mapping...", 0)
+            # Show loading overlay for analysis
+            self.loading_overlay.showWithText(f"Analyzing {len(self.samples)} samples...")
             
-            print(f"DEBUG: Starting intelligent mapping with {len(self.samples)} samples")
-            print(f"DEBUG: Sample types: {[type(s).__name__ for s in self.samples[:3]]}")
+            # Disable UI during analysis
+            self.table_widget.setEnabled(False)
+            for child in self.findChildren(QPushButton):
+                child.setEnabled(False)
+            
+            # Process events to show overlay immediately
+            QApplication.processEvents()
             
             # Analyze all samples
             analyses = []
@@ -793,12 +1041,22 @@ class SampleMappingPanel(QWidget):
                 else:
                     file_path = getattr(sample, "path", "")
                 
-                print(f"DEBUG: Sample {i}: {file_path}")
+                # Update overlay text with progress
+                if i % 5 == 0:  # Update every 5 files
+                    self.loading_overlay.label.setText(f"Analyzing sample {i+1} of {len(self.samples)}...")
+                    QApplication.processEvents()
                 
                 if file_path:
                     analysis = SampleAnalyzer.analyze_sample(file_path)
                     analyses.append(analysis)
-                    print(f"DEBUG:   Analysis: {analysis['detected_note']} (confidence {analysis['confidence']})")
+            
+            # Hide overlay before showing dialog
+            self.loading_overlay.hide()
+            
+            # Re-enable UI
+            self.table_widget.setEnabled(True)
+            for child in self.findChildren(QPushButton):
+                child.setEnabled(True)
             
             if not analyses:
                 if hasattr(self.main_window, 'statusBar'):
@@ -817,21 +1075,28 @@ class SampleMappingPanel(QWidget):
             
             if dialog.exec_() == dialog.Accepted:
                 confirmed_notes, confirmed_layers, options = dialog.get_confirmed_mappings()
-                print(f"DEBUG: Dialog accepted with {len(confirmed_notes)} notes and {len(confirmed_layers)} layers")
                 self._apply_intelligent_mappings(confirmed_notes, confirmed_layers, options)
                 
         except Exception as e:
+            # Hide overlay on error
+            self.loading_overlay.hide()
+            
+            # Re-enable UI
+            self.table_widget.setEnabled(True)
+            for child in self.findChildren(QPushButton):
+                child.setEnabled(True)
+            
+            self.error_handler.handle_error(
+                e,
+                "creating intelligent mappings",
+                show_dialog=True
+            )
             if hasattr(self.main_window, 'statusBar'):
                 self.main_window.statusBar().showMessage(f"Intelligent mapping error: {str(e)}", 5000)
-            print(f"Error in intelligent mapping: {e}")
     
     def _apply_intelligent_mappings(self, note_mappings: dict, layer_groups: dict, options: dict):
         """Apply confirmed intelligent mappings"""
         try:
-            print(f"DEBUG: _apply_intelligent_mappings called")
-            print(f"DEBUG: note_mappings: {len(note_mappings)}")
-            print(f"DEBUG: layer_groups: {len(layer_groups)}")
-            print(f"DEBUG: options: {options}")
             
             applied_count = 0
             layered_count = 0
@@ -898,13 +1163,10 @@ class SampleMappingPanel(QWidget):
                         layered_count += 1
             
             # Update the UI
-            print(f"DEBUG: Updating UI with {len(self.samples)} samples")
             self.set_samples(self.samples)
             
             # CRITICAL: Update the main preset object with the new mappings
             if hasattr(self.main_window, "preset"):
-                print(f"DEBUG: Updating main preset mappings...")
-                print(f"DEBUG: Current preset has {len(getattr(self.main_window.preset, 'mappings', []))} mappings")
                 
                 # Convert our samples back to the main preset format
                 from model import SampleMapping
@@ -916,7 +1178,6 @@ class SampleMappingPanel(QWidget):
                         hi = sample.get("hi", 127)
                         root = sample.get("root", 60)
                         mapping = SampleMapping(path, lo, hi, root)
-                        print(f"DEBUG:   Sample {i} (dict): {os.path.basename(path)} -> {lo}-{hi} (root {root})")
                     else:
                         # Handle SampleMapping objects
                         lo = getattr(sample, "lo", 0)
@@ -924,17 +1185,14 @@ class SampleMappingPanel(QWidget):
                         root = getattr(sample, "root", 60)
                         path = getattr(sample, "path", "")
                         mapping = sample
-                        print(f"DEBUG:   Sample {i} (obj): {os.path.basename(path)} -> {lo}-{hi} (root {root})")
                     preset_mappings.append(mapping)
                 
                 old_count = len(getattr(self.main_window.preset, 'mappings', []))
                 self.main_window.preset.mappings = preset_mappings
                 new_count = len(self.main_window.preset.mappings)
-                print(f"DEBUG: Updated main preset: {old_count} -> {new_count} mappings")
             
             # Update live preview
             if hasattr(self.main_window, "preview_canvas") and hasattr(self.main_window, "preset"):
-                print(f"DEBUG: Updating preview canvas...")
                 self.main_window.preview_canvas.set_preset(self.main_window.preset, "")
             
             # Show results
@@ -945,8 +1203,18 @@ class SampleMappingPanel(QWidget):
                 )
                 
         except Exception as e:
+            self.error_handler.handle_error(
+                e,
+                "applying intelligent mappings",
+                show_dialog=True
+            )
             if hasattr(self.main_window, 'statusBar'):
                 self.main_window.statusBar().showMessage(f"Error applying mappings: {str(e)}", 5000)
-            print(f"Error applying intelligent mappings: {e}")
-
-    # (Inline zone editor helpers removed)
+    
+    def _show_import_hint(self):
+        """Show helpful hint about new import features"""
+        if hasattr(self.main_window, 'statusBar'):
+            self.main_window.statusBar().showMessage(
+                "💡 Tip: Drag & drop sample folders here! Auto-detects root notes from filenames (C4, F#3, etc.) and velocity layers (_pp, _f, _hard)",
+                10000  # Show for 10 seconds
+            )

@@ -1,12 +1,16 @@
-from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QPushButton, QFileDialog, QHBoxLayout
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QLabel, QListWidget, QPushButton, QFileDialog, QHBoxLayout, QApplication
 from PyQt5.QtCore import Qt
 from commands.commands import SampleAutoMapCommand
+from widgets.loading_indicators import LoadingOverlay, CircularProgress
 
 class SamplePanel(QWidget):
     def __init__(self, main_window):
         super().__init__()
         self.main_window = main_window
         self.samples = []
+        
+        # Create loading overlay
+        self.loading_overlay = LoadingOverlay(self)
         layout = QVBoxLayout()
         layout.addWidget(QLabel("Samples"))
         self.list_widget = QListWidget()
@@ -55,18 +59,39 @@ class SamplePanel(QWidget):
     def import_samples(self):
         files, _ = QFileDialog.getOpenFileNames(self, "Import WAV Samples", "", "WAV Files (*.wav)")
         if files:
+            # Show loading for large batches
+            if len(files) > 5:
+                self.loading_overlay.showWithText(f"Importing {len(files)} samples...")
+                QApplication.processEvents()
+            
             # Add as dicts with default mapping
-            for f in files:
+            for i, f in enumerate(files):
+                if len(files) > 5 and i % 10 == 0:
+                    self.loading_overlay.label.setText(f"Processing sample {i+1} of {len(files)}...")
+                    QApplication.processEvents()
+                
                 self.samples.append({"path": f, "lo": 0, "hi": 127, "root": 60})
+            
+            # Hide loading overlay
+            self.loading_overlay.hide()
+            
             self.set_samples(self.samples)
             # TODO: Push undo command and update preset/mapping form
 
     def auto_map_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Select Sample Folder")
         if folder and hasattr(self.main_window, "preset"):
+            # Show loading overlay
+            self.loading_overlay.showWithText("Auto-mapping folder...")
+            QApplication.processEvents()
+            
             old_mappings = list(self.main_window.preset.mappings)
             self.main_window.preset.auto_map(folder)
             new_mappings = list(self.main_window.preset.mappings)
+            
+            # Hide loading overlay
+            self.loading_overlay.hide()
+            
             cmd = SampleAutoMapCommand(
                 self.main_window.preset, old_mappings, new_mappings, update_callback=self.refresh_sample_list
             )
