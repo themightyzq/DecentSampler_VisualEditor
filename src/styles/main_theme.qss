@@ -20,7 +20,7 @@
 QWidget {
     background-color: #1a1a1a;
     color: #ffffff;
-    font-family: "Segoe UI", Arial, sans-serif;
+    font-family: Arial, Helvetica, sans-serif;
     font-size: 12px;
 }
 
@@ -432,18 +432,8 @@ QCheckBox::indicator:checked {
     image: none;
 }
 
-QCheckBox::indicator:checked::after {
-    content: "";
-    width: 4px;
-    height: 8px;
-    border: 2px solid #ffffff;
-    border-top: none;
-    border-left: none;
-    transform: rotate(45deg);
-    position: absolute;
-    top: 2px;
-    left: 5px;
-}
+/* Note: PyQt doesn't support ::after pseudo-elements or transform property
+   Checkmark styling is handled programmatically in the checkbox widgets */
 
 /* ===== Menu Bar and Menus ===== */
 QMenuBar {

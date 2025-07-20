@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import QWidget
 from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QPixmap, QFont
 from PyQt5.QtCore import Qt, QRect
+from utils.theme_manager import ThemeColors, ThemeFonts
 
 class KnobWidget(QWidget):
     @classmethod
@@ -23,22 +24,37 @@ class KnobWidget(QWidget):
             if not skin_pixmap.isNull():
                 painter.drawPixmap(rect, skin_pixmap)
             else:
-                # Fallback to default rendering when skin fails to load
-                pass
+                # Fallback to default dark theme rendering when skin fails to load
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(QColor(ThemeColors.PANEL_BG))
+                painter.drawRoundedRect(rect, 4, 4)
+                painter.setPen(QColor(ThemeColors.TEXT_PRIMARY))
+                painter.setFont(QFont(ThemeFonts.FAMILY, max(8, min(12, int(height * 0.3)))))
+                painter.drawText(rect, Qt.AlignCenter, label)
         else:
-            # Draw track background
+            # Draw track background using theme colors
             painter.setPen(Qt.NoPen)
-            painter.setBrush(QColor("#" + trackBackgroundColor) if not trackBackgroundColor.startswith("0x") else QColor(int(trackBackgroundColor, 16)))
+            try:
+                bg_color = QColor("#" + trackBackgroundColor) if not trackBackgroundColor.startswith("0x") else QColor(int(trackBackgroundColor, 16))
+            except (ValueError, TypeError):
+                bg_color = QColor(ThemeColors.PANEL_BG)
+            painter.setBrush(bg_color)
             painter.drawEllipse(rect)
-            # Draw track foreground (border)
-            pen = QPen(QColor("#" + trackForegroundColor) if not trackForegroundColor.startswith("0x") else QColor(int(trackForegroundColor, 16)))
+            
+            # Draw track foreground (border) using theme colors
+            try:
+                fg_color = QColor("#" + trackForegroundColor) if not trackForegroundColor.startswith("0x") else QColor(int(trackForegroundColor, 16))
+            except (ValueError, TypeError):
+                fg_color = QColor(ThemeColors.BORDER)
+            pen = QPen(fg_color)
             pen.setWidth(2)
             painter.setPen(pen)
             painter.setBrush(Qt.NoBrush)
             painter.drawEllipse(rect)
-            # Draw label
-            painter.setPen(Qt.black)
-            painter.setFont(QFont("Arial", textSize))
+            
+            # Draw label using theme colors
+            painter.setPen(QColor(ThemeColors.TEXT_PRIMARY))
+            painter.setFont(QFont(ThemeFonts.FAMILY, max(8, min(textSize, 16))))
             painter.drawText(rect, Qt.AlignCenter, label)
         painter.end()
         return pixmap
@@ -55,8 +71,13 @@ class SliderWidget(QWidget):
             if not skin_pixmap.isNull():
                 painter.drawPixmap(rect, skin_pixmap)
             else:
-                # Fallback to default rendering when skin fails to load
-                pass
+                # Fallback to default dark theme rendering when skin fails to load
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(QColor(ThemeColors.PANEL_BG))
+                painter.drawRoundedRect(rect, 4, 4)
+                painter.setPen(QColor(ThemeColors.TEXT_PRIMARY))
+                painter.setFont(QFont(ThemeFonts.FAMILY, max(8, min(12, int(height * 0.3)))))
+                painter.drawText(rect, Qt.AlignCenter, label)
         else:
             painter.setPen(Qt.darkGray)
             painter.setBrush(QColor(200, 200, 255))
@@ -65,8 +86,8 @@ class SliderWidget(QWidget):
             else:
                 slider_rect = QRect(rect.x(), rect.y() + rect.height() // 2 - 6, rect.width(), 12)
             painter.drawRect(slider_rect)
-            painter.setPen(Qt.black)
-            painter.setFont(QFont("Arial", max(8, int(height * 0.18))))
+            painter.setPen(QColor(ThemeColors.TEXT_PRIMARY))
+            painter.setFont(QFont(ThemeFonts.FAMILY, max(8, int(height * 0.18))))
             painter.drawText(rect, Qt.AlignCenter, label)
         painter.end()
         return pixmap
@@ -83,14 +104,19 @@ class ButtonWidget(QWidget):
             if not skin_pixmap.isNull():
                 painter.drawPixmap(rect, skin_pixmap)
             else:
-                # Fallback to default rendering when skin fails to load
-                pass
+                # Fallback to default dark theme rendering when skin fails to load
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(QColor(ThemeColors.PANEL_BG))
+                painter.drawRoundedRect(rect, 4, 4)
+                painter.setPen(QColor(ThemeColors.TEXT_PRIMARY))
+                painter.setFont(QFont(ThemeFonts.FAMILY, max(8, min(12, int(height * 0.3)))))
+                painter.drawText(rect, Qt.AlignCenter, label)
         else:
-            painter.setPen(Qt.darkGray)
-            painter.setBrush(QColor(180, 255, 180))
+            painter.setPen(QColor(ThemeColors.BORDER))
+            painter.setBrush(QColor(ThemeColors.SUCCESS))
             painter.drawRect(rect)
-            painter.setPen(Qt.black)
-            painter.setFont(QFont("Arial", max(8, int(height * 0.18))))
+            painter.setPen(QColor(ThemeColors.TEXT_PRIMARY))
+            painter.setFont(QFont(ThemeFonts.FAMILY, max(8, int(height * 0.18))))
             painter.drawText(rect, Qt.AlignCenter, label)
         painter.end()
         return pixmap
@@ -107,14 +133,19 @@ class MenuWidget(QWidget):
             if not skin_pixmap.isNull():
                 painter.drawPixmap(rect, skin_pixmap)
             else:
-                # Fallback to default rendering when skin fails to load
-                pass
+                # Fallback to default dark theme rendering when skin fails to load
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(QColor(ThemeColors.PANEL_BG))
+                painter.drawRoundedRect(rect, 4, 4)
+                painter.setPen(QColor(ThemeColors.TEXT_PRIMARY))
+                painter.setFont(QFont(ThemeFonts.FAMILY, max(8, min(12, int(height * 0.3)))))
+                painter.drawText(rect, Qt.AlignCenter, label)
         else:
-            painter.setPen(Qt.darkGray)
-            painter.setBrush(QColor(255, 255, 180))
+            painter.setPen(QColor(ThemeColors.BORDER))
+            painter.setBrush(QColor(ThemeColors.WARNING))
             painter.drawRect(rect)
-            painter.setPen(Qt.black)
-            painter.setFont(QFont("Arial", max(8, int(height * 0.18))))
+            painter.setPen(QColor(ThemeColors.TEXT_PRIMARY))
+            painter.setFont(QFont(ThemeFonts.FAMILY, max(8, int(height * 0.18))))
             painter.drawText(rect, Qt.AlignCenter, label)
         painter.end()
         return pixmap
@@ -126,10 +157,10 @@ class LabelWidget(QWidget):
         pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
         rect = QRect(0, 0, width, height)
-        painter.setPen(Qt.black)
-        painter.setBrush(QColor(255, 255, 255, 200))
+        painter.setPen(QColor(ThemeColors.TEXT_PRIMARY))
+        painter.setBrush(QColor(ThemeColors.PANEL_BG))
         painter.drawRect(rect)
-        painter.setFont(QFont("Arial", max(10, int(height * 0.32))))
+        painter.setFont(QFont(ThemeFonts.FAMILY, max(10, int(height * 0.32))))
         painter.drawText(rect, Qt.AlignCenter, label)
         painter.end()
         return pixmap
@@ -142,10 +173,10 @@ class FallbackWidget(QWidget):
         pixmap.fill(Qt.transparent)
         painter = QPainter(pixmap)
         rect = QRect(0, 0, width, height)
-        painter.setPen(Qt.black)
+        painter.setPen(QColor(ThemeColors.TEXT_PRIMARY))
         painter.setBrush(Qt.NoBrush)
         painter.drawRect(rect)
-        painter.setFont(QFont("Arial", max(8, int(height * 0.18))))
+        painter.setFont(QFont(ThemeFonts.FAMILY, max(8, int(height * 0.18))))
         painter.drawText(rect, Qt.AlignCenter, label)
         painter.end()
         return pixmap

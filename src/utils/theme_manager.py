@@ -62,7 +62,7 @@ class ThemeColors:
 
 class ThemeFonts:
     """Centralized font definitions"""
-    FAMILY = "Segoe UI, Arial, sans-serif"
+    FAMILY = "Arial, Helvetica, sans-serif"
     
     # Font sizes
     SIZE_H1 = 18

@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import QWidget, QSizePolicy, QToolTip, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QScrollArea
 from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal, QSize
-from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QFont, QFontMetrics, QLinearGradient, QPixmap, QPolygon, QPoint, QIcon, QRegion
+from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QFont, QFontMetrics, QLinearGradient, QPixmap, QPolygon, QIcon, QRegion
+from PyQt5.QtCore import QPoint
 from PyQt5.QtMultimedia import QSound
 from utils.audio_transposition import get_transposition_engine, SampleTranspositionWidget
 from utils.accessibility import (
