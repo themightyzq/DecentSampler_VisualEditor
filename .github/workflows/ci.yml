@@ -10,23 +10,26 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.7", "3.9", "3.11"]
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        python-version: ["3.9", "3.11", "3.12"]
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install system dependencies for Qt
+      - name: Install Linux Qt dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-xinerama0 libegl1
+          sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-xinerama0 libegl1 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0
 
       - name: Install core dependencies
         run: |
@@ -35,12 +38,17 @@ jobs:
           pip install pytest
 
       - name: Install optional dependencies
-        run: |
-          pip install -r requirements-optional.txt
+        run: pip install -r requirements-optional.txt
         continue-on-error: true
 
-      - name: Run tests
-        run: |
-          QT_QPA_PLATFORM=offscreen python -m pytest tests/ -v
+      - name: Run tests (Linux)
+        if: runner.os == 'Linux'
+        run: xvfb-run python -m pytest tests/ -v
         env:
-          DISPLAY: :99
+          QT_QPA_PLATFORM: offscreen
+
+      - name: Run tests (macOS/Windows)
+        if: runner.os != 'Linux'
+        run: python -m pytest tests/ -v
+        env:
+          QT_QPA_PLATFORM: offscreen
