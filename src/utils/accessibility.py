@@ -379,7 +379,7 @@ class AccessibilityIndicator:
         if size.width() >= 16:
             painter.setPen(QColor(AccessibilityColors.WHITE))
             font = painter.font()
-            font.setPixelSize(8)
+            font.setPixelSize(10)
             painter.setFont(font)
             painter.drawText(pixmap.rect(), Qt.AlignCenter, symbol)
         

@@ -7,7 +7,7 @@ Now integrated with the centralized theme system
 from PyQt5.QtWidgets import QLabel, QWidget
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
-from .theme_manager import ThemeColors, ThemeFonts, ThemeSpacing, theme_manager
+from .theme_manager import ThemeColors, ThemeFonts, ThemeSpacing, theme_manager  # noqa: F401
 
 class UIConstants:
     """Constants for consistent UI styling - now references theme system"""
@@ -134,30 +134,30 @@ class TabStyler:
         
         return f"""
             QTabWidget::pane {{
-                border: 1px solid #444;
-                background-color: #2a2a2a;
+                border: 1px solid {ThemeColors.BORDER_HOVER};
+                background-color: {ThemeColors.PANEL_BG};
             }}
-            
+
             QTabBar::tab {{
-                background-color: #3a3a3a;
-                color: #c0c0c0;
-                border: 1px solid #444;
+                background-color: {ThemeColors.BORDER};
+                color: {ThemeColors.TEXT_SECONDARY};
+                border: 1px solid {ThemeColors.BORDER_HOVER};
                 border-bottom: none;
                 padding: {padding}px {padding * 2}px;
                 margin-right: 2px;
                 font-size: {font_size}px;
                 font-weight: 500;
             }}
-            
+
             QTabBar::tab:selected {{
-                background-color: #4a7c59;
-                color: #ffffff;
+                background-color: {ThemeColors.ACCENT};
+                color: {ThemeColors.TEXT_PRIMARY};
                 font-weight: 600;
             }}
-            
+
             QTabBar::tab:hover:!selected {{
-                background-color: #4a4a4a;
-                color: #ffffff;
+                background-color: {ThemeColors.BORDER_HOVER};
+                color: {ThemeColors.TEXT_PRIMARY};
             }}
         """
 
@@ -173,24 +173,24 @@ class ButtonStyler:
         
         return f"""
             QPushButton {{
-                background-color: #4a7c59;
-                color: white;
-                border: 1px solid #3a6b49;
-                border-radius: 4px;
+                background-color: {ThemeColors.ACCENT};
+                color: {ThemeColors.TEXT_PRIMARY};
+                border: 1px solid {ThemeColors.ACCENT_PRESSED};
+                border-radius: {ThemeSpacing.RADIUS_MEDIUM}px;
                 padding: {padding}px {padding * 2}px;
                 font-size: {font_size}px;
                 font-weight: 500;
                 min-height: {height}px;
             }}
             QPushButton:hover {{
-                background-color: #5a8c69;
+                background-color: {ThemeColors.ACCENT_HOVER};
             }}
             QPushButton:pressed {{
-                background-color: #3a6b49;
+                background-color: {ThemeColors.ACCENT_PRESSED};
             }}
             QPushButton:disabled {{
-                background-color: #666;
-                color: #999;
+                background-color: {ThemeColors.TEXT_DISABLED};
+                color: {ThemeColors.TEXT_SECONDARY};
             }}
         """
     
@@ -203,10 +203,10 @@ class ButtonStyler:
         
         return f"""
             QPushButton {{
-                background-color: #4a4a4a;
-                color: #f0f0f0;
-                border: 1px solid #666;
-                border-radius: 4px;
+                background-color: {ThemeColors.BORDER_HOVER};
+                color: {ThemeColors.TEXT_PRIMARY};
+                border: 1px solid {ThemeColors.TEXT_DISABLED};
+                border-radius: {ThemeSpacing.RADIUS_MEDIUM}px;
                 padding: {padding}px {padding * 2}px;
                 font-size: {font_size}px;
                 font-weight: 500;
@@ -216,10 +216,10 @@ class ButtonStyler:
                 background-color: #5a5a5a;
             }}
             QPushButton:pressed {{
-                background-color: #3a3a3a;
+                background-color: {ThemeColors.BORDER};
             }}
             QPushButton:disabled {{
-                background-color: #333;
-                color: #777;
+                background-color: {ThemeColors.PRESSED_BG};
+                color: {ThemeColors.TEXT_DISABLED};
             }}
         """

@@ -9,6 +9,7 @@ from collections import defaultdict
 from typing import List, Dict, Tuple, Optional
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QCheckBox, QPushButton, QTableWidget, QTableWidgetItem, QTextEdit, QHBoxLayout, QGroupBox, QSpinBox
 from PyQt5.QtCore import Qt
+from utils.theme_manager import ThemeColors
 
 class SampleAnalyzer:
     """Advanced sample filename analysis with note detection and classification"""
@@ -391,7 +392,7 @@ class IntelligentMappingDialog(QDialog):
         
         # Summary
         self.summary_label = QLabel()
-        self.summary_label.setStyleSheet("color: #666; margin-bottom: 15px;")
+        self.summary_label.setStyleSheet(f"color: {ThemeColors.TEXT_DISABLED}; margin-bottom: 15px;")
         layout.addWidget(self.summary_label)
         
         # Note mappings section
@@ -456,7 +457,7 @@ class IntelligentMappingDialog(QDialog):
         
         apply_btn = QPushButton("Apply Mappings")
         apply_btn.clicked.connect(self.accept)
-        apply_btn.setStyleSheet("background-color: #4a7c59; color: white; font-weight: bold;")
+        apply_btn.setStyleSheet(f"background-color: {ThemeColors.ACCENT}; color: {ThemeColors.TEXT_PRIMARY}; font-weight: bold;")
         button_layout.addWidget(apply_btn)
         
         layout.addLayout(button_layout)

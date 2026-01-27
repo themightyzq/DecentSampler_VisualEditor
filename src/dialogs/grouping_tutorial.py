@@ -8,6 +8,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QPixmap, QPainter, QColor, QPen, QBrush
+from utils.theme_manager import ThemeColors
 
 class GroupingTutorialDialog(QDialog):
     """Interactive tutorial explaining sample grouping concepts"""
@@ -15,7 +16,8 @@ class GroupingTutorialDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Sample Grouping Tutorial")
-        self.setFixedSize(800, 600)
+        self.setMinimumSize(700, 500)
+        self.resize(800, 600)
         self.init_ui()
         
     def init_ui(self):
@@ -25,7 +27,7 @@ class GroupingTutorialDialog(QDialog):
         header = QLabel("🎵 Understanding Sample Groups in DecentSampler")
         header.setFont(QFont("Arial", 16, QFont.Bold))
         header.setAlignment(Qt.AlignCenter)
-        header.setStyleSheet("padding: 10px; background-color: #4a9eff; color: white; border-radius: 5px;")
+        header.setStyleSheet(f"padding: 10px; background-color: {ThemeColors.ACCENT}; color: {ThemeColors.TEXT_PRIMARY}; border-radius: 5px;")
         layout.addWidget(header)
         
         # Create tabs for different concepts
@@ -56,7 +58,7 @@ class GroupingTutorialDialog(QDialog):
         # Close button
         close_btn = QPushButton("Got It!")
         close_btn.clicked.connect(self.accept)
-        close_btn.setStyleSheet("QPushButton { background-color: #51cf66; color: white; font-weight: bold; padding: 8px 16px; }")
+        close_btn.setStyleSheet(f"QPushButton {{ background-color: {ThemeColors.SUCCESS}; color: {ThemeColors.TEXT_PRIMARY}; font-weight: bold; padding: 8px 16px; }}")
         layout.addWidget(close_btn)
         
         self.setLayout(layout)

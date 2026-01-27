@@ -99,3 +99,15 @@ dmypy.json
 # General
 *.swp
 *~
+
+# AI / tooling
+.claude/
+CLAUDE.md
+
+# QA artifacts and debug scripts
+qa_artifacts/
+scripts/debug/
+
+# Internal docs (not user-facing)
+docs/archive/
+docs/ui_legibility_interactability_audit.md

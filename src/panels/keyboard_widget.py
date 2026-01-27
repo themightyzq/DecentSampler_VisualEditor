@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox, QPushButton, QColorDialog, QFormLayout, QGroupBox
 from PyQt5.QtCore import Qt, pyqtSignal, QRect
 from PyQt5.QtGui import QPainter, QBrush, QPen, QColor, QFont
+from utils.theme_manager import ThemeColors
 import math
 
 class KeyboardColorRange:
@@ -50,7 +51,7 @@ class DecentSamplerKeyboard(QWidget):
         applicable_ranges = [r for r in self.color_ranges if r.lo_note <= note <= r.hi_note]
         if not applicable_ranges:
             # Default colors
-            return QColor("#888888" if pressed else "#444444")
+            return QColor(ThemeColors.TEXT_HINT if pressed else ThemeColors.BORDER_HOVER)
         
         # Use the most specific range (smallest range)
         best_range = min(applicable_ranges, key=lambda r: r.hi_note - r.lo_note)
@@ -159,15 +160,15 @@ class DecentSamplerKeyboard(QWidget):
                     painter.fillRect(rect, QBrush(color))
                     
                     # Draw border
-                    painter.setPen(QPen(QColor("#222222"), 1))
+                    painter.setPen(QPen(QColor(ThemeColors.PRIMARY_BG), 1))
                     painter.drawRect(rect)
                     
                     # Draw sample indicator
                     if has_sample:
-                        painter.setPen(QPen(QColor("#00FF00"), 2))
+                        painter.setPen(QPen(QColor(ThemeColors.SUCCESS), 2))
                         indicator_rect = QRect(rect.x() + 2, rect.bottom() - 8, rect.width() - 4, 4)
                         painter.drawRect(indicator_rect)
-                        
+
         # Draw black keys on top
         for note in range(self.start_note, self.end_note + 1):
             if self.is_black_key(note):
@@ -175,30 +176,30 @@ class DecentSamplerKeyboard(QWidget):
                 if rect.isValid():
                     pressed = note in self.pressed_keys
                     color = self.get_key_color(note, pressed)
-                    
+
                     # Check if this note has a sample mapping
                     has_sample = any(
-                        mapping.lo <= note <= mapping.hi 
-                        for mapping in self.sample_mappings 
+                        mapping.lo <= note <= mapping.hi
+                        for mapping in self.sample_mappings
                         if hasattr(mapping, 'lo') and hasattr(mapping, 'hi')
                     )
-                    
+
                     # Draw key background
                     painter.fillRect(rect, QBrush(color))
-                    
+
                     # Draw border
-                    painter.setPen(QPen(QColor("#000000"), 1))
+                    painter.setPen(QPen(Qt.black, 1))
                     painter.drawRect(rect)
                     
                     # Draw sample indicator
                     if has_sample:
-                        painter.setPen(QPen(QColor("#00FF00"), 2))
+                        painter.setPen(QPen(QColor(ThemeColors.SUCCESS), 2))
                         indicator_rect = QRect(rect.x() + 1, rect.bottom() - 6, rect.width() - 2, 3)
                         painter.drawRect(indicator_rect)
                         
         # Draw note labels on white keys (C notes)
-        painter.setPen(QPen(QColor("#666666")))
-        painter.setFont(QFont("Arial", 8))
+        painter.setPen(QPen(QColor(ThemeColors.TEXT_DISABLED)))
+        painter.setFont(QFont("Arial", 10))
         for note in range(self.start_note, self.end_note + 1):
             if note % 12 == 0:  # C notes
                 rect = self.get_white_key_rect(note)

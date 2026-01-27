@@ -9,12 +9,12 @@
 /* Border Color: #3a3a3a */
 /* Accent Blue: #4a9eff */
 /* Accent Hover: #6bb3ff */
-/* Success Green: #4caf50 */
+/* Success Green: #66bb6a */
 /* Warning Orange: #ff9800 */
-/* Error Red: #f44336 */
+/* Error Red: #ff6659 */
 /* Text Primary: #ffffff */
 /* Text Secondary: #b0b0b0 */
-/* Text Disabled: #666666 */
+/* Text Disabled: #8a8a8a */
 
 /* ===== Base Application Styling ===== */
 QWidget {
@@ -59,6 +59,11 @@ QLabel[heading="h3"] {
 QLabel[secondary="true"] {
     color: #b0b0b0;
     font-size: 11px;
+}
+
+QLabel[class="caption"] {
+    font-size: 10px;
+    color: #b0b0b0;
 }
 
 /* ===== Panels and Containers ===== */
@@ -139,7 +144,7 @@ QPushButton:pressed {
 
 QPushButton:disabled {
     background-color: #2a2a2a;
-    color: #666666;
+    color: #8a8a8a;
     border-color: #3a3a3a;
 }
 
@@ -178,7 +183,7 @@ QLineEdit:focus, QTextEdit:focus, QPlainTextEdit:focus {
 
 QLineEdit:disabled, QTextEdit:disabled, QPlainTextEdit:disabled {
     background-color: #1a1a1a;
-    color: #666666;
+    color: #8a8a8a;
     border-color: #2a2a2a;
 }
 
@@ -558,6 +563,41 @@ QStatusBar {
 .ModulationPanel {
     background-color: #252525;
     padding: 12px;
+}
+
+/* ===== Focus Indicators (WCAG keyboard accessibility) ===== */
+QPushButton:focus {
+    border: 2px solid #4a9eff;
+}
+
+QToolButton:focus {
+    border: 2px solid #4a9eff;
+    border-radius: 4px;
+}
+
+QCheckBox:focus, QRadioButton:focus {
+    outline: none;
+}
+
+QCheckBox::indicator:focus, QRadioButton::indicator:focus {
+    border: 2px solid #4a9eff;
+}
+
+QComboBox:focus {
+    border: 2px solid #4a9eff;
+}
+
+QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 2px solid #4a9eff;
+}
+
+QSlider:focus {
+    border: 1px solid #4a9eff;
+    border-radius: 3px;
+}
+
+QTabBar::tab:focus {
+    border: 2px solid #4a9eff;
 }
 
 /* ===== Animations (for future implementation) ===== */

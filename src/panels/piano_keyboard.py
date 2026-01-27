@@ -3,6 +3,7 @@ from PyQt5.QtCore import Qt, QTimer, QRect, pyqtSignal, QSize
 from PyQt5.QtGui import QPainter, QColor, QPen, QBrush, QFont, QFontMetrics, QLinearGradient, QPixmap, QPolygon, QIcon, QRegion
 from PyQt5.QtCore import QPoint
 from PyQt5.QtMultimedia import QSound
+from utils.theme_manager import ThemeColors
 from utils.audio_transposition import get_transposition_engine, SampleTranspositionWidget
 from utils.accessibility import (
     AccessibilityIndicator, AccessibilityColors, PatternType, AccessibilitySymbol,
@@ -345,13 +346,13 @@ class PianoKeyboardWidget(QWidget):
                     if self.show_symbols and symbol and pos['width'] > 16:
                         painter.setPen(QPen(QColor(AccessibilityColors.WHITE), 1))
                         font = painter.font()
-                        font.setPixelSize(8)
+                        font.setPixelSize(10)
                         font.setBold(True)
                         painter.setFont(font)
-                        
+
                         symbol_rect = QRect(
-                            int(pos['x'] + pos['width'] - 12), 
-                            int(pos['height'] - 14), 
+                            int(pos['x'] + pos['width'] - 12),
+                            int(pos['height'] - 14),
                             10, 10
                         )
                         painter.drawText(symbol_rect, Qt.AlignCenter, symbol)
@@ -416,11 +417,11 @@ class PianoKeyboardWidget(QWidget):
                     if self.show_symbols and symbol:
                         painter.setPen(QPen(QColor(AccessibilityColors.WHITE), 1))
                         font = painter.font()
-                        font.setPixelSize(8)
+                        font.setPixelSize(10)
                         font.setBold(True)
                         painter.setFont(font)
-                        
-                        symbol_rect = QRect(int(indicator_x), int(indicator_y + 10), 
+
+                        symbol_rect = QRect(int(indicator_x), int(indicator_y + 10),
                                           indicator_width, 8)
                         painter.drawText(symbol_rect, Qt.AlignCenter, symbol)
                 else:
@@ -481,12 +482,12 @@ class PianoKeyboardWidget(QWidget):
                             
                             painter.setPen(QPen(QColor(AccessibilityColors.WHITE), 1))
                             font = painter.font()
-                            font.setPixelSize(8)
+                            font.setPixelSize(10)
                             font.setBold(True)
                             painter.setFont(font)
-                            
+
                             symbol_rect = QRect(
-                                int(lo_x + 2), 
+                                int(lo_x + 2),
                                 int(y_offset + i * (layer_height + 1) - 8), 
                                 20, 8
                             )
@@ -598,7 +599,7 @@ class PianoKeyboardWidget(QWidget):
                     painter.drawPixmap(int(indicator_x), int(indicator_y), indicator_pixmap)
                 else:
                     # Original text-based indicators
-                    painter.setFont(QFont("Arial", 6))
+                    painter.setFont(QFont("Arial", 10))
                     
                     # Choose indicator based on transposition direction and amount
                     if abs(semitone_diff) <= 12:  # Within one octave
@@ -1270,13 +1271,13 @@ class PianoKeyboardWidget(QWidget):
                     if self.show_symbols and symbol and pos['width'] > 16:
                         painter.setPen(QPen(QColor(AccessibilityColors.WHITE), 1))
                         font = painter.font()
-                        font.setPixelSize(8)
+                        font.setPixelSize(10)
                         font.setBold(True)
                         painter.setFont(font)
-                        
+
                         symbol_rect = QRect(
-                            int(pos['x'] + pos['width'] - 12), 
-                            int(pos['height'] - 14), 
+                            int(pos['x'] + pos['width'] - 12),
+                            int(pos['height'] - 14),
                             10, 10
                         )
                         painter.drawText(symbol_rect, Qt.AlignCenter, symbol)
@@ -1334,11 +1335,11 @@ class PianoKeyboardWidget(QWidget):
                     if self.show_symbols and symbol:
                         painter.setPen(QPen(QColor(AccessibilityColors.WHITE), 1))
                         font = painter.font()
-                        font.setPixelSize(8)
+                        font.setPixelSize(10)
                         font.setBold(True)
                         painter.setFont(font)
-                        
-                        symbol_rect = QRect(int(indicator_x), int(indicator_y + 10), 
+
+                        symbol_rect = QRect(int(indicator_x), int(indicator_y + 10),
                                           indicator_width, 8)
                         painter.drawText(symbol_rect, Qt.AlignCenter, symbol)
                 else:
@@ -1465,203 +1466,5 @@ class PianoKeyboardWidget(QWidget):
         self.cached_background_valid = False
 
 
-class KeyboardLegendWidget(QWidget):
-    """Legend widget showing color-coded sample mappings"""
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.legend_items = []
-        self.accessibility_enabled = accessibility_settings.colorblind_mode
-        self.accessibility_indicator = accessibility_settings.get_indicator_factory()
-        self.init_ui()
-    
-    def init_ui(self):
-        self.setFixedHeight(110)  # Increased for better text visibility
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        
-        # Setup layout
-        layout = QVBoxLayout()
-        layout.setContentsMargins(8, 4, 8, 4)
-        layout.setSpacing(2)
-        
-        # Header
-        if self.accessibility_enabled:
-            header_text = "🔧 Sample Mapping Legend (Accessible Mode)"
-        else:
-            header_text = "📊 Sample Mapping Legend"
-        
-        header = QLabel(header_text)
-        header.setFont(QFont("Arial", 10, QFont.Bold))
-        header.setStyleSheet("color: #4a9eff; padding: 2px;")
-        layout.addWidget(header)
-        
-        # Scroll area for legend items
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        self.scroll_area.setMaximumHeight(70)
-        
-        self.legend_container = QWidget()
-        self.legend_layout = QHBoxLayout()
-        self.legend_layout.setContentsMargins(2, 2, 2, 2)
-        self.legend_layout.setSpacing(8)
-        self.legend_container.setLayout(self.legend_layout)
-        
-        self.scroll_area.setWidget(self.legend_container)
-        layout.addWidget(self.scroll_area)
-        
-        self.setLayout(layout)
-        
-        # Apply dark theme
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #2b2b2b;
-                color: white;
-            }
-            QScrollArea {
-                border: 1px solid #444;
-                border-radius: 3px;
-                background-color: #333;
-            }
-        """)
-    
-    def update_legend(self, legend_items):
-        """Update the legend with new items"""
-        # Clear existing items
-        for i in reversed(range(self.legend_layout.count())):
-            self.legend_layout.itemAt(i).widget().setParent(None)
-        
-        self.legend_items = legend_items
-        
-        # Add new legend items
-        for item in legend_items:
-            legend_item = self.create_legend_item(item)
-            self.legend_layout.addWidget(legend_item)
-        
-        # Add stretch to push items to the left
-        self.legend_layout.addStretch()
-    
-    def create_legend_item(self, item):
-        """Create a visual legend item with accessibility enhancements"""
-        container = QFrame()
-        container.setFrameStyle(QFrame.StyledPanel)
-        
-        if self.accessibility_enabled:
-            container.setFixedSize(150, 70)  # Increased for better text visibility
-        else:
-            container.setFixedSize(130, 60)  # Increased for better text visibility
-        
-        layout = QVBoxLayout()
-        layout.setContentsMargins(4, 2, 4, 2)
-        layout.setSpacing(1)
-        
-        if self.accessibility_enabled:
-            # Enhanced indicator with pattern and symbol
-            indicator_layout = QHBoxLayout()
-            indicator_layout.setContentsMargins(0, 0, 0, 0)
-            
-            # Get accessibility components
-            mapping_index = self.legend_items.index(item) if item in self.legend_items else 0
-            color, brush, symbol = self.accessibility_indicator.create_mapping_indicator(mapping_index)
-            
-            # Pattern indicator
-            pattern_indicator = QLabel()
-            pattern_pixmap = QPixmap(30, 12)
-            pattern_pixmap.fill(Qt.transparent)
-            
-            painter = QPainter(pattern_pixmap)
-            painter.setBrush(brush)
-            painter.setPen(Qt.NoPen)
-            painter.drawRect(pattern_pixmap.rect())
-            painter.end()
-            
-            pattern_indicator.setPixmap(pattern_pixmap)
-            indicator_layout.addWidget(pattern_indicator)
-            
-            # Symbol indicator
-            if symbol:
-                symbol_label = QLabel(symbol)
-                symbol_label.setFont(QFont("Arial", 12, QFont.Bold))
-                symbol_label.setStyleSheet("color: white; background-color: rgba(0,0,0,100); padding: 2px; border-radius: 2px;")
-                symbol_label.setAlignment(Qt.AlignCenter)
-                symbol_label.setFixedSize(20, 16)
-                indicator_layout.addWidget(symbol_label)
-            
-            indicator_layout.addStretch()
-            layout.addLayout(indicator_layout)
-        else:
-            # Original color bar
-            color_bar = QFrame()
-            color_bar.setFixedHeight(8)
-            color_bar.setStyleSheet(f"""
-                background-color: rgb({item['color'].red()}, {item['color'].green()}, {item['color'].blue()});
-                border-radius: 2px;
-            """)
-            layout.addWidget(color_bar)
-        
-        # Sample name
-        name_label = QLabel(item['name'])
-        name_label.setFont(QFont("Arial", 8, QFont.Bold))
-        name_label.setAlignment(Qt.AlignCenter)
-        if len(item['name']) > (10 if self.accessibility_enabled else 12):
-            display_name = item['name'][:(10 if self.accessibility_enabled else 12)] + "..."
-            name_label.setText(display_name)
-            name_label.setToolTip(item['name'])
-        layout.addWidget(name_label)
-        
-        # Range info
-        range_label = QLabel(item['range'])
-        range_label.setFont(QFont("Arial", 7))
-        range_label.setAlignment(Qt.AlignCenter)
-        range_label.setStyleSheet("color: #ccc;")
-        layout.addWidget(range_label)
-        
-        # Root note
-        root_label = QLabel(f"Root: {item['root']}")
-        root_label.setFont(QFont("Arial", 7))
-        root_label.setAlignment(Qt.AlignCenter)
-        root_label.setStyleSheet("color: #aaa;")
-        layout.addWidget(root_label)
-        
-        container.setLayout(layout)
-        
-        # Enhanced tooltip for accessibility
-        if self.accessibility_enabled:
-            tooltip_text = (f"Sample: {item['name']}\n"
-                          f"Range: {item['range']}\n"
-                          f"Root: {item['root']}\n"
-                          f"File: {os.path.basename(item['path'])}\n"
-                          f"Accessibility: Pattern and symbol indicators included")
-        else:
-            tooltip_text = (f"Sample: {item['name']}\n"
-                          f"Range: {item['range']}\n"
-                          f"Root: {item['root']}\n"
-                          f"File: {os.path.basename(item['path'])}")
-        
-        container.setToolTip(tooltip_text)
-        
-        return container
-    
-    def set_accessibility_mode(self, enabled):
-        """Enable or disable accessibility mode for the legend"""
-        self.accessibility_enabled = enabled
-        self.accessibility_indicator = accessibility_settings.get_indicator_factory()
-        
-        # Update header
-        if self.accessibility_enabled:
-            header_text = "🔧 Sample Mapping Legend (Accessible Mode)"
-        else:
-            header_text = "📊 Sample Mapping Legend"
-        
-        # Find and update header label
-        for i in range(self.layout().count()):
-            widget = self.layout().itemAt(i).widget()
-            if isinstance(widget, QLabel) and ("Legend" in widget.text()):
-                widget.setText(header_text)
-                break
-        
-        # Refresh legend items with current items
-        if hasattr(self, 'legend_items'):
-            current_items = self.legend_items.copy()
-            self.update_legend(current_items)
+# Re-export for backward compatibility
+from panels.keyboard_legend import KeyboardLegendWidget  # noqa: F401

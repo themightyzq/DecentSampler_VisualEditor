@@ -18,6 +18,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QPalette, QFont, QColor
 from model import SampleZone
+from utils.theme_manager import ThemeColors
 
 class SampleGroup:
     """Represents a DecentSampler sample group with all its properties"""
@@ -348,19 +349,19 @@ class GroupEditorWidget(QGroupBox):
         """
         
         # Consistent field styling
-        field_style = """
-            QLineEdit, QDoubleSpinBox {
+        field_style = f"""
+            QLineEdit, QDoubleSpinBox {{
                 min-height: 28px;
                 font-size: 14px;
                 padding: 4px 8px;
-                background-color: #2a2a2a;
-                border: 1px solid #444;
+                background-color: {ThemeColors.PANEL_BG};
+                border: 1px solid {ThemeColors.BORDER_HOVER};
                 border-radius: 4px;
-                color: #f0f0f0;
-            }
-            QLineEdit:focus, QDoubleSpinBox:focus {
-                border-color: #4a7c59;
-            }
+                color: {ThemeColors.TEXT_PRIMARY};
+            }}
+            QLineEdit:focus, QDoubleSpinBox:focus {{
+                border-color: {ThemeColors.ACCENT};
+            }}
         """
         
         # Group name
@@ -496,19 +497,19 @@ class GroupEditorWidget(QGroupBox):
         """
         
         # Consistent field styling
-        field_style = """
-            QDoubleSpinBox {
+        field_style = f"""
+            QDoubleSpinBox {{
                 min-height: 28px;
                 font-size: 14px;
                 padding: 4px 8px;
-                background-color: #2a2a2a;
-                border: 1px solid #444;
+                background-color: {ThemeColors.PANEL_BG};
+                border: 1px solid {ThemeColors.BORDER_HOVER};
                 border-radius: 4px;
-                color: #f0f0f0;
-            }
-            QDoubleSpinBox:focus {
-                border-color: #4a7c59;
-            }
+                color: {ThemeColors.TEXT_PRIMARY};
+            }}
+            QDoubleSpinBox:focus {{
+                border-color: {ThemeColors.ACCENT};
+            }}
         """
         
         self.use_group_envelope = QCheckBox("Override instrument envelope")
@@ -1080,7 +1081,7 @@ class SampleSelectionDialog(QDialog):
         
         ok_btn = QPushButton("Add Selected")
         ok_btn.clicked.connect(self.accept)
-        ok_btn.setStyleSheet("background-color: #4a7c59; color: white; font-weight: bold;")
+        ok_btn.setStyleSheet(f"background-color: {ThemeColors.ACCENT}; color: {ThemeColors.TEXT_PRIMARY}; font-weight: bold;")
         button_layout.addWidget(ok_btn)
         
         layout.addLayout(button_layout)

@@ -1,4 +1,10 @@
 import sys
+import os
+
+# Prevent PySide6 from being loaded alongside PyQt5 — mixing both
+# Qt bindings in one process causes SIGSEGV at shutdown.
+os.environ["QT_API"] = "pyqt5"
+
 from PyQt5.QtWidgets import QApplication, QMessageBox
 from PyQt5.QtCore import Qt, QSettings
 from views.windows.main_window import MainWindow
@@ -44,7 +50,15 @@ def main():
     
     window = MainWindow()
     window.showMaximized()  # Start maximized as per the UI analysis
-    sys.exit(app.exec_())
+    exit_code = app.exec_()
+
+    # Explicitly delete the window and app before Python finalizes.
+    # Without this, SIP's atexit cleanup tries to destroy QWidgets
+    # after Qt's backing store is already freed, causing SIGSEGV.
+    del window
+    del app
+
+    sys.exit(exit_code)
 
 if __name__ == "__main__":
     main()

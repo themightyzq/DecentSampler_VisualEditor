@@ -5,29 +5,30 @@ UI Helper functions for consistent styling and behavior across the application
 from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGroupBox, QFrame
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont, QPalette, QColor
+from utils.theme_manager import ThemeColors, ThemeFonts, ThemeSpacing
 
-# UI Constants for consistency
+# UI Constants for consistency — delegates to centralized theme system
 UI_CONSTANTS = {
-    'primary_color': '#2b2b2b',
-    'secondary_color': '#3c3c3c', 
-    'accent_color': '#4a9eff',
-    'text_color': '#ffffff',
-    'disabled_color': '#666666',
-    'error_color': '#ff6b6b',
-    'success_color': '#51cf66',
-    'warning_color': '#ffd43b',
-    
-    'font_size_small': 9,
-    'font_size_normal': 11,
-    'font_size_large': 13,
-    'font_size_header': 16,
-    
-    'spacing_small': 4,
-    'spacing_normal': 8,
-    'spacing_large': 16,
-    
-    'border_radius': 4,
-    'control_height': 24,
+    'primary_color': ThemeColors.PRIMARY_BG,
+    'secondary_color': ThemeColors.SECONDARY_BG,
+    'accent_color': ThemeColors.ACCENT,
+    'text_color': ThemeColors.TEXT_PRIMARY,
+    'disabled_color': ThemeColors.TEXT_DISABLED,
+    'error_color': ThemeColors.ERROR,
+    'success_color': ThemeColors.SUCCESS,
+    'warning_color': ThemeColors.WARNING,
+
+    'font_size_small': ThemeFonts.SIZE_TINY,
+    'font_size_normal': ThemeFonts.SIZE_SMALL,
+    'font_size_large': ThemeFonts.SIZE_H3,
+    'font_size_header': ThemeFonts.SIZE_H1,
+
+    'spacing_small': ThemeSpacing.SPACING_SMALL,
+    'spacing_normal': ThemeSpacing.SPACING_MEDIUM,
+    'spacing_large': ThemeSpacing.SPACING_LARGE,
+
+    'border_radius': ThemeSpacing.RADIUS_MEDIUM,
+    'control_height': ThemeSpacing.HEIGHT_SMALL_BUTTON,
 }
 
 def apply_dark_theme(widget):
@@ -79,16 +80,16 @@ def apply_dark_theme(widget):
                 width: 20px;
                 height: 20px;
                 background-color: rgba(40, 40, 40, 0.8);
-                border: 2px solid #666;
+                border: 2px solid {ThemeColors.TEXT_DISABLED};
                 border-radius: 4px;
             }}
             QCheckBox::indicator:hover {{
-                border-color: #888;
+                border-color: {ThemeColors.TEXT_HINT};
                 background-color: rgba(50, 50, 50, 0.8);
             }}
             QCheckBox::indicator:unchecked {{
                 background-color: rgba(40, 40, 40, 0.8);
-                border: 2px solid #666;
+                border: 2px solid {ThemeColors.TEXT_DISABLED};
                 border-radius: 4px;
             }}
             QCheckBox::indicator:checked {{
@@ -108,7 +109,7 @@ def apply_dark_theme(widget):
             QCheckBox {{
                 spacing: 8px;
                 font-size: 14px;
-                color: #f0f0f0;
+                color: {ThemeColors.TEXT_PRIMARY};
             }}
             QTabWidget::pane {{
                 border: 1px solid {UI_CONSTANTS['secondary_color']};

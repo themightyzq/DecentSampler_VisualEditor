@@ -7,6 +7,7 @@ from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QIcon, QPainter, QColor
 
 from utils.effects_catalog import EFFECTS_CATALOG
+from utils.theme_manager import ThemeColors
 
 from PyQt5.QtWidgets import QDialog, QDialogButtonBox
 
@@ -148,21 +149,21 @@ class AddControlDialog(QDialog):
             ):
                 valid = False
                 errors.append("Duplicate Label + Effect Type + Parameter.")
-                self.label_edit.setStyleSheet("background-color: #ffcccc;")
+                self.label_edit.setStyleSheet(f"background-color: {ThemeColors.ERROR}33;")
                 break
 
         # Min < Max
         if min_val >= max_val:
             valid = False
             errors.append("Min must be less than Max.")
-            self.min_spin.setStyleSheet("background-color: #ffcccc;")
-            self.max_spin.setStyleSheet("background-color: #ffcccc;")
+            self.min_spin.setStyleSheet(f"background-color: {ThemeColors.ERROR}33;")
+            self.max_spin.setStyleSheet(f"background-color: {ThemeColors.ERROR}33;")
 
         # Default in range
         if not (min_val <= default_val <= max_val):
             valid = False
             errors.append("Default Value must be within Min–Max range.")
-            self.default_spin.setStyleSheet("background-color: #ffcccc;")
+            self.default_spin.setStyleSheet(f"background-color: {ThemeColors.ERROR}33;")
 
         if not label:
             valid = False
@@ -314,9 +315,9 @@ class ProjectPropertiesPanel(QDockWidget):
         row_layout = QHBoxLayout()
         row_layout.setContentsMargins(8, 2, 8, 2)
         row_layout.setSpacing(8)
-        row_widget.setStyleSheet("""
-            background: #f7f7fa;
-            border: 1px solid #e0e0e0;
+        row_widget.setStyleSheet(f"""
+            background: {ThemeColors.PANEL_BG};
+            border: 1px solid {ThemeColors.BORDER};
         """)
 
         # Label (not editable here, truncated to 12 chars with ellipsis)
@@ -381,17 +382,17 @@ class ProjectPropertiesPanel(QDockWidget):
         edit_btn = QPushButton("E")
         edit_btn.setFixedSize(28, 28)
         edit_btn.setToolTip("Edit")
-        edit_btn.setStyleSheet("""
+        edit_btn.setStyleSheet(f"""
             font-size: 16px; font-weight: bold; text-align: center;
-            background: #e6eaff;
+            background: {ThemeColors.ACCENT}33;
         """)
         edit_btn.clicked.connect(lambda _, i=idx: self._edit_control(i))
         del_btn = QPushButton("✖")
         del_btn.setFixedSize(28, 28)
         del_btn.setToolTip("Delete")
-        del_btn.setStyleSheet("""
+        del_btn.setStyleSheet(f"""
             font-size: 16px; font-weight: bold; text-align: center;
-            background: #ffeaea;
+            background: {ThemeColors.ERROR}33;
             margin-left: 4px;
         """)
         del_btn.clicked.connect(lambda _, i=idx: self._delete_control(i))
@@ -476,8 +477,8 @@ class ProjectPropertiesPanel(QDockWidget):
         self.add_control_btn.clicked.connect(self._open_add_control_modal)
         self.controls_layout.addWidget(self.add_control_btn)
         # Set the properties panel width to a compact value
-        self.setMinimumWidth(380)
-        self.setMaximumWidth(420)
+        self.setMinimumWidth(340)
+        self.setMaximumWidth(500)
         
         # Restore focus if we had a focused widget before rebuild
         if focused_control_idx is not None and focused_property is not None:

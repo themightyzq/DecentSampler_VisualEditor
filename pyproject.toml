@@ -1,0 +1,14 @@
+[project]
+name = "decentsampler-editor"
+version = "0.1.0"
+description = "Visual editor for DecentSampler .dspreset files"
+requires-python = ">=3.7"
+dependencies = ["PyQt5"]
+
+[project.optional-dependencies]
+audio = ["pygame", "numpy", "librosa", "pydub", "soundfile"]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

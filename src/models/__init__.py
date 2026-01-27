@@ -1,4 +1,3 @@
-"""Backward-compatibility shim. All classes now live in models/ and serialization/."""
 from models.data_classes import (
     SampleZone,
     SampleManager,

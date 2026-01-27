@@ -35,15 +35,15 @@ This document outlines the design system and UI/UX guidelines for the DecentSamp
 - **Accent Pressed**: `#3a8eee` - Pressed state for accented elements
 
 ### Status Colors
-- **Success**: `#4caf50` - Successful operations
+- **Success**: `#66bb6a` - Successful operations (WCAG AA 5.1:1)
 - **Warning**: `#ff9800` - Warnings and cautions
-- **Error**: `#f44336` - Errors and critical issues
+- **Error**: `#ff6659` - Errors and critical issues (WCAG AA 5.2:1)
 - **Info**: `#2196f3` - Informational messages
 
 ### Text Colors
 - **Primary Text**: `#ffffff` - Main content and headers
 - **Secondary Text**: `#b0b0b0` - Secondary information
-- **Disabled Text**: `#666666` - Disabled state
+- **Disabled Text**: `#8a8a8a` - Disabled state (WCAG AA 5.0:1)
 - **Hint Text**: `#888888` - Placeholder and hints
 
 ### Border Colors

@@ -1,72 +1,72 @@
-# Decent Sampler Visual Editor
+# DecentSampler Visual Editor
 
-A cross-platform, local desktop application for visually editing Decent Sampler `.dspreset` files. Built with Python and PyQt5 for a native look and feel on Windows, macOS, and Linux.
+A cross-platform desktop application for visually editing DecentSampler `.dspreset` files. Built with Python and PyQt5.
 
-## Features (Planned)
+## Features
 
-- Visual editor for all Decent Sampler XML features
-- Drag-and-drop audio file assignment to MIDI notes
-- Modern UI for building and editing `.dspreset` files
-- Immediate refresh and live validation of changes
-- 1:1 mapping to Decent Sampler's featureset and documentation
-- Cross-platform: Windows, macOS, Linux
+- Visual editor for DecentSampler XML features (samples, groups, effects, modulation)
+- Piano keyboard widget with note-range visualization
+- Dark theme with accessibility support
+- Background-threaded file I/O
+- Graceful degradation when optional audio packages are missing
 
 ## Getting Started
 
 ### Prerequisites
 
-- Python 3.7 or newer
+- Python 3.7+
 
 ### Installation
 
-1. Clone this repository or download the source code.
-2. Install dependencies with pip (Python package manager):
-    ```
-    pip install -r requirements.txt
-    ```
-
-### Running the App
-
+```bash
+pip install -r requirements.txt
+pip install -r requirements-optional.txt  # Optional: pygame, numpy, librosa, pydub, soundfile
 ```
-python src/main.py
+
+### Running
+
+```bash
+cd src && python main.py
+```
+
+### Testing
+
+```bash
+pip install pytest
+cd src && python -m pytest ../tests/ -v
 ```
 
 ### Distribution (Standalone Executable)
 
-To build a standalone app (no Python required for end users):
+```bash
+pip install pyinstaller
+pyinstaller --onefile --windowed src/main.py
+```
 
-1. Install PyInstaller:
-    ```
-    pip install pyinstaller
-    ```
-2. Build the app:
-    ```
-    pyinstaller --onefile --windowed src/main.py
-    ```
-   The executable will be in the `dist/` folder.
+## Architecture
 
-- On macOS, you may see a warning about the app being from an unidentified developer. You can override this in System Preferences > Security & Privacy.
-- No code signing is required for personal or community use.
+```
+src/
+├── main.py                      # Entry point
+├── model.py                     # Backward-compat shim (re-exports from models/)
+├── models/                      # Data model classes
+│   ├── data_classes.py          # SampleZone, SampleMapping, LFO, UIElement, etc.
+│   └── instrument_preset.py     # InstrumentPreset (core preset object)
+├── serialization/               # XML I/O
+│   ├── dspreset_reader.py       # .dspreset XML → InstrumentPreset
+│   └── dspreset_writer.py       # InstrumentPreset → .dspreset XML
+├── views/
+│   ├── windows/main_window.py   # Main UI coordinator
+│   └── panels/                  # View-layer panels (sample mapping, preview, etc.)
+├── panels/                      # Core panels (piano keyboard, groups, modulation, etc.)
+├── widgets/                     # Custom widgets (knobs, sliders, audio preview)
+├── utils/                       # Utilities (theme, errors, accessibility, layout)
+├── styles/main_theme.qss        # QSS stylesheet
+└── commands/commands.py         # Undo/redo (stub)
+```
 
-
-## Project Structure
-
-- `src/main.py` — Main application entry point
-- `requirements.txt` — Python dependencies
-
-## Roadmap
-
-- XML parsing and writing for `.dspreset` files
-- Drag-and-drop audio file support
-- MIDI note assignment UI
-- Visual UI builder for Decent Sampler `<ui>` XML
-- Immediate preview/refresh
-- Modular codebase for future expansion
+See [docs/UI_STYLE_GUIDE.md](docs/UI_STYLE_GUIDE.md) for the design system reference.
 
 ## License
 
 MIT License
-
----
-
-This project is in early development. Contributions and feedback are welcome!

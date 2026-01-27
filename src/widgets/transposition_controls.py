@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont, QColor, QPalette
 from utils.audio_transposition import get_transposition_engine, SampleTranspositionWidget
+from utils.theme_manager import ThemeColors
 
 class TranspositionControlWidget(QGroupBox):
     """Widget for controlling sample transposition and tuning"""
@@ -48,19 +49,19 @@ class TranspositionControlWidget(QGroupBox):
         self.setLayout(layout)
         
         # Apply styling
-        self.setStyleSheet("""
-            QGroupBox {
+        self.setStyleSheet(f"""
+            QGroupBox {{
                 font-weight: bold;
                 border: 1px solid #555;
                 margin-top: 10px;
                 padding-top: 10px;
-            }
-            QGroupBox::title {
-                color: #4a9eff;
+            }}
+            QGroupBox::title {{
+                color: {ThemeColors.ACCENT};
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 5px 0 5px;
-            }
+            }}
         """)
         
     def create_root_note_section(self):
@@ -76,7 +77,7 @@ class TranspositionControlWidget(QGroupBox):
         self.root_note_spin.setToolTip("MIDI note number of the original sample (C4 = 60)")
         
         self.root_note_label = QLabel("C4")
-        self.root_note_label.setStyleSheet("font-weight: bold; color: #4a9eff;")
+        self.root_note_label.setStyleSheet(f"font-weight: bold; color: {ThemeColors.ACCENT};")
         
         root_layout = QHBoxLayout()
         root_layout.addWidget(self.root_note_spin)
@@ -175,21 +176,22 @@ class TranspositionControlWidget(QGroupBox):
         
         # Status label
         self.capabilities_label = QLabel(f"Engine: {capabilities['quality']}")
-        self.capabilities_label.setFont(QFont("Arial", 8))
+        self.capabilities_label.setFont(QFont("Arial", 10))
         
         if capabilities['can_transpose']:
-            self.capabilities_label.setStyleSheet("color: #51cf66;")  # Green
+            self.capabilities_label.setStyleSheet(f"color: {ThemeColors.SUCCESS};")
         else:
-            self.capabilities_label.setStyleSheet("color: #ff6b6b;")  # Red
+            self.capabilities_label.setStyleSheet(f"color: {ThemeColors.ERROR};")
             
         layout.addWidget(self.capabilities_label)
-        
+        self.capabilities_label.setWordWrap(True)
+
         # Recommendations
         if capabilities['recommendations']:
             rec_text = capabilities['recommendations'][0]  # Show first recommendation
             rec_label = QLabel(rec_text)
-            rec_label.setFont(QFont("Arial", 7))
-            rec_label.setStyleSheet("color: #888;")
+            rec_label.setFont(QFont("Arial", 10))
+            rec_label.setStyleSheet(f"color: {ThemeColors.TEXT_HINT};")
             rec_label.setWordWrap(True)
             layout.addWidget(rec_label)
         

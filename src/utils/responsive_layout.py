@@ -35,31 +35,32 @@ class ResponsiveTabWidget(QTabWidget):
                 screen_width = screen.size().width()
                 self.setStyleSheet(TabStyler.get_tab_stylesheet(screen_width))
         except ImportError:
-            # Fallback styling
-            self.setStyleSheet("""
-                QTabWidget::pane {
-                    border: 1px solid #444;
-                    background-color: #2a2a2a;
-                }
-                QTabBar::tab {
-                    background-color: #3a3a3a;
-                    color: #c0c0c0;
-                    border: 1px solid #444;
+            # Fallback styling using theme colors
+            from utils.theme_manager import ThemeColors
+            self.setStyleSheet(f"""
+                QTabWidget::pane {{
+                    border: 1px solid {ThemeColors.BORDER_HOVER};
+                    background-color: {ThemeColors.PANEL_BG};
+                }}
+                QTabBar::tab {{
+                    background-color: {ThemeColors.BORDER};
+                    color: {ThemeColors.TEXT_SECONDARY};
+                    border: 1px solid {ThemeColors.BORDER_HOVER};
                     border-bottom: none;
                     padding: 8px 16px;
                     margin-right: 2px;
                     font-size: 11px;
                     font-weight: 500;
-                }
-                QTabBar::tab:selected {
-                    background-color: #4a7c59;
-                    color: #ffffff;
+                }}
+                QTabBar::tab:selected {{
+                    background-color: {ThemeColors.ACCENT};
+                    color: {ThemeColors.TEXT_PRIMARY};
                     font-weight: 600;
-                }
-                QTabBar::tab:hover:!selected {
-                    background-color: #4a4a4a;
-                    color: #ffffff;
-                }
+                }}
+                QTabBar::tab:hover:!selected {{
+                    background-color: {ThemeColors.BORDER_HOVER};
+                    color: {ThemeColors.TEXT_PRIMARY};
+                }}
             """)
 
 class ResponsivePanel(QWidget):

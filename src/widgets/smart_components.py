@@ -489,6 +489,72 @@ class ParameterMapper(QWidget):
             self.mappings.remove(mapping_widget)
 
 
+class CollapsibleSection(QFrame):
+    """A collapsible section with a clickable header and animated toggle."""
+
+    def __init__(self, title="", parent=None, initially_collapsed=False):
+        super().__init__(parent)
+        self._collapsed = initially_collapsed
+        self._title = title
+        self._content_widget = None
+        self._setup_ui()
+
+    def _setup_ui(self):
+        self.setFrameStyle(QFrame.NoFrame)
+        self.setStyleSheet("QFrame { background: transparent; border: none; }")
+
+        self._main_layout = QVBoxLayout(self)
+        self._main_layout.setContentsMargins(0, 0, 0, 0)
+        self._main_layout.setSpacing(0)
+
+        # Header button
+        self._header = QPushButton(f"{'▶' if self._collapsed else '▼'}  {self._title}")
+        self._header.setFlat(True)
+        self._header.setCursor(Qt.PointingHandCursor)
+        self._header.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {ThemeColors.SECONDARY_BG};
+                color: {ThemeColors.TEXT_PRIMARY};
+                border: 1px solid {ThemeColors.BORDER};
+                border-radius: {ThemeSpacing.RADIUS_MEDIUM}px;
+                padding: 8px 12px;
+                font-size: 13px;
+                font-weight: 600;
+                text-align: left;
+            }}
+            QPushButton:hover {{
+                background-color: {ThemeColors.HOVER_BG};
+                border-color: {ThemeColors.ACCENT};
+            }}
+        """)
+        self._header.clicked.connect(self.toggle)
+        self._main_layout.addWidget(self._header)
+
+        # Content container
+        self._content_container = QWidget()
+        self._content_layout = QVBoxLayout(self._content_container)
+        self._content_layout.setContentsMargins(0, 4, 0, 0)
+        self._content_layout.setSpacing(0)
+        self._main_layout.addWidget(self._content_container)
+
+        self._content_container.setVisible(not self._collapsed)
+
+    def set_content(self, widget):
+        if self._content_widget:
+            self._content_layout.removeWidget(self._content_widget)
+        self._content_widget = widget
+        self._content_layout.addWidget(widget)
+
+    def toggle(self):
+        self._collapsed = not self._collapsed
+        self._content_container.setVisible(not self._collapsed)
+        arrow = '▶' if self._collapsed else '▼'
+        self._header.setText(f"{arrow}  {self._title}")
+
+    def is_collapsed(self):
+        return self._collapsed
+
+
 # Convenience functions for creating common components
 def create_primary_button(text, callback=None):
     """Create a primary action button"""

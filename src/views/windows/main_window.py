@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import (
-    QMainWindow, QAction, QFileDialog, QMessageBox, QSplitter, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QApplication
+    QMainWindow, QAction, QFileDialog, QMessageBox, QSplitter, QWidget, QVBoxLayout, QHBoxLayout, QSizePolicy, QApplication, QStackedWidget
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QThread, QTimer
 from PyQt5.QtWidgets import QUndoStack
@@ -20,10 +20,10 @@ from utils.theme_manager import theme_manager, ThemeColors, ThemeSpacing
 
 # Import enhanced UI components
 from utils.enhanced_layout import LayoutGrid, create_section_separator
-from widgets.smart_components import SmartTabWidget, WorkflowPanel, SmartButton
+from widgets.smart_components import SmartTabWidget, WorkflowPanel, SmartButton, CollapsibleSection
+from widgets.welcome_overlay import WelcomeOverlay
 from utils.enhanced_typography import create_h2_label, create_body_label
 from model import InstrumentPreset, SampleMapping, SampleZone
-import controller
 import os
 
 # Import UI helpers for consistency
@@ -59,7 +59,7 @@ class PresetLoadWorker(QThread):
             self.loading_progress.emit("Parsing XML data...")
             
             # Load the preset
-            preset = controller.load_preset(self.file_path)
+            preset = InstrumentPreset.from_dspreset(self.file_path)
             
             if not preset:
                 raise ValueError("Invalid preset data")
@@ -93,7 +93,7 @@ class PresetSaveWorker(QThread):
             self.saving_progress.emit("Generating XML...")
             
             # Save the preset
-            controller.save_preset(self.file_path, self.preset)
+            self.preset.to_dspreset(self.file_path)
             
             self.saving_progress.emit("Preset saved successfully")
             self.preset_saved.emit(self.file_path)
@@ -183,27 +183,27 @@ class MainWindow(QMainWindow):
         
         # View menu
         view_menu = menubar.addMenu("View")
-        
+
         # Tab switching actions
-        samples_tab_action = QAction("Samples Tab", self)
+        samples_tab_action = QAction("Main Tab", self)
         samples_tab_action.setShortcut("Ctrl+1")
         samples_tab_action.triggered.connect(lambda: self.main_tabs.setCurrentIndex(0))
         view_menu.addAction(samples_tab_action)
-        
-        properties_tab_action = QAction("Properties Tab", self)
-        properties_tab_action.setShortcut("Ctrl+2")
-        properties_tab_action.triggered.connect(lambda: self.main_tabs.setCurrentIndex(1))
-        view_menu.addAction(properties_tab_action)
-        
+
         modulation_tab_action = QAction("Modulation Tab", self)
-        modulation_tab_action.setShortcut("Ctrl+3")
-        modulation_tab_action.triggered.connect(lambda: self.main_tabs.setCurrentIndex(2))
+        modulation_tab_action.setShortcut("Ctrl+2")
+        modulation_tab_action.triggered.connect(lambda: self.main_tabs.setCurrentIndex(1))
         view_menu.addAction(modulation_tab_action)
-        
+
         groups_tab_action = QAction("Groups Tab", self)
-        groups_tab_action.setShortcut("Ctrl+4")
-        groups_tab_action.triggered.connect(lambda: self.main_tabs.setCurrentIndex(3))
+        groups_tab_action.setShortcut("Ctrl+3")
+        groups_tab_action.triggered.connect(lambda: self.main_tabs.setCurrentIndex(2))
         view_menu.addAction(groups_tab_action)
+
+        view_menu.addSeparator()
+
+        # Preset Settings dock toggle — added dynamically after dock creation
+        self._view_menu = view_menu
         
         # Help menu
         help_menu = menubar.addMenu("Help")
@@ -323,36 +323,46 @@ class MainWindow(QMainWindow):
         from panels.piano_keyboard import KeyboardLegendWidget
         self.keyboard_legend = KeyboardLegendWidget()
         samples_layout.addWidget(self.keyboard_legend)
-        
+
+        # ADSR collapsible section inside Main tab
+        samples_layout.addWidget(create_section_separator())
+        self.adsr_section = CollapsibleSection("Envelope (ADSR)", initially_collapsed=False)
+        self.adsr_section.set_content(self.group_properties_panel_widget)
+        samples_layout.addWidget(self.adsr_section)
+
         samples_widget = QWidget()
         samples_widget.setLayout(samples_layout)
-        
-        # Add tabs with workflow optimization
+
+        # Add tabs with workflow optimization (3 tabs: Main, Modulation, Groups)
         self.main_tabs.add_workflow_tab(
-            samples_widget, "Main", "🎹", 
-            "Sample visualization and keyboard mapping", "Ctrl+1"
+            samples_widget, "Main", "\U0001F3B9",
+            "Sample visualization, keyboard mapping, and envelope", "Ctrl+1"
         )
-        
-        # ADSR tab
-        self.main_tabs.add_workflow_tab(
-            self.group_properties_panel_widget, "ADSR", "📈", 
-            "Envelope and dynamics controls", "Ctrl+2"
-        )
-        
+
         # Modulation tab
         self.main_tabs.add_workflow_tab(
-            self.modulation_panel, "Modulation", "🌊", 
-            "LFO and modulation controls", "Ctrl+3"
+            self.modulation_panel, "Modulation", "\U0001F30A",
+            "LFO and modulation controls", "Ctrl+2"
         )
-        
+
         # Groups tab
         self.main_tabs.add_workflow_tab(
-            self.group_manager, "Groups", "📁", 
-            "Sample group management", "Ctrl+4"
+            self.group_manager, "Groups", "\U0001F4C1",
+            "Sample group management", "Ctrl+3"
         )
         
-        main_layout.addWidget(self.main_tabs, 2)  # Give main tabs more space
-        
+        # Wrap main_tabs in a stacked widget with welcome overlay
+        self.content_stack = QStackedWidget()
+        self.welcome_overlay = WelcomeOverlay()
+        self.welcome_overlay.importFolderClicked.connect(self._welcome_import_folder)
+        self.welcome_overlay.openPresetClicked.connect(self.open_preset)
+        self.welcome_overlay.filesDropped.connect(self._welcome_files_dropped)
+        self.content_stack.addWidget(self.welcome_overlay)   # page 0
+        self.content_stack.addWidget(self.main_tabs)          # page 1
+        self.content_stack.setCurrentIndex(0)
+
+        main_layout.addWidget(self.content_stack, 2)  # Give main content more space
+
         # Connect visual mapping after all components are created
         self._connect_visual_mapping()
     
@@ -413,10 +423,19 @@ class MainWindow(QMainWindow):
             show_error(self, "Panel init failed", str(e))
             raise
         self.addDockWidget(Qt.RightDockWidgetArea, self.global_options_panel)
-        
+
         # Set responsive panel sizing
         self.global_options_panel.setMinimumWidth(350)
         self.global_options_panel.setMaximumWidth(450)
+
+        # Hide by default for cleaner first-run experience
+        self.global_options_panel.hide()
+
+        # Add toggle to View menu
+        if hasattr(self, '_view_menu'):
+            toggle_action = self.global_options_panel.toggleViewAction()
+            toggle_action.setText("Preset Settings")
+            self._view_menu.addAction(toggle_action)
 
     def _connectSignals(self):
         # Enhanced signal connections with proper error handling
@@ -552,11 +571,8 @@ class MainWindow(QMainWindow):
         # Update keyboard visualization
         self._update_keyboard_visualization()
         
-        # Status/help message with better guidance
-        if UI_HELPERS_AVAILABLE:
-            self.status_manager.show_message("Welcome! Start by importing samples, then map them to keys, configure effects, and save your preset.", "info", 5000)
-        else:
-            self.statusBar().showMessage("Steps: 1) Import samples  2) Map to keys  3) Configure effects  4) Preview  5) Save")
+        # Show welcome overlay for fresh preset
+        self._switch_to_welcome()
 
     def open_preset(self):
         """Open a preset file with comprehensive error handling"""
@@ -619,7 +635,10 @@ class MainWindow(QMainWindow):
             
             # Update keyboard visualization
             self._update_keyboard_visualization()
-            
+
+            # Switch to editor view
+            self._switch_to_editor()
+
             # Hide loading overlay and re-enable UI
             self.loading_overlay.hide()
             self.menuBar().setEnabled(True)
@@ -967,6 +986,34 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.error_handler.handle_error(e, "updating keyboard visualization", show_dialog=False)
     
+    def _switch_to_editor(self):
+        """Switch from welcome overlay to the editor tabs."""
+        if hasattr(self, 'content_stack'):
+            self.content_stack.setCurrentIndex(1)
+
+    def _switch_to_welcome(self):
+        """Switch back to the welcome overlay."""
+        if hasattr(self, 'content_stack'):
+            self.content_stack.setCurrentIndex(0)
+
+    def _welcome_import_folder(self):
+        """Handle import folder click from welcome overlay."""
+        self._switch_to_editor()
+        self.sample_mapping_panel.import_folder()
+
+    def _welcome_files_dropped(self, paths):
+        """Handle files dropped on welcome overlay."""
+        self._switch_to_editor()
+        # Separate files and folders
+        file_paths = []
+        for p in paths:
+            if os.path.isdir(p):
+                file_paths.extend(self.sample_mapping_panel._get_audio_files_from_folder(p))
+            elif self.sample_mapping_panel._is_audio_file(p):
+                file_paths.append(p)
+        if file_paths:
+            self.sample_mapping_panel._start_batch_import(file_paths)
+
     def check_dependencies(self):
         """Show dialog with dependency check results"""
         self.error_handler.show_dependency_status()

@@ -10,6 +10,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QSize, pyqtSignal
 from PyQt5.QtGui import QFont, QIcon
+from utils.theme_manager import ThemeColors, ThemeSpacing
 
 class ResponsiveDialog(QDialog):
     """Base responsive dialog that adapts to screen size"""
@@ -48,45 +49,45 @@ class ResponsiveDialog(QDialog):
         self.setModal(True)
         
         # Apply dark theme styling
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #2b2b2b;
-                color: white;
-            }
-            
-            QLabel {
-                color: white;
-            }
-            
-            QPushButton {
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {ThemeColors.SECONDARY_BG};
+                color: {ThemeColors.TEXT_PRIMARY};
+            }}
+
+            QLabel {{
+                color: {ThemeColors.TEXT_PRIMARY};
+            }}
+
+            QPushButton {{
                 background-color: #404040;
-                color: white;
+                color: {ThemeColors.TEXT_PRIMARY};
                 border: 1px solid #555;
                 padding: 6px 12px;
-                border-radius: 3px;
-            }
-            
-            QPushButton:hover {
+                border-radius: {ThemeSpacing.RADIUS_SMALL}px;
+            }}
+
+            QPushButton:hover {{
                 background-color: #505050;
-            }
-            
-            QPushButton:pressed {
-                background-color: #353535;
-            }
-            
-            QGroupBox {
-                color: white;
+            }}
+
+            QPushButton:pressed {{
+                background-color: {ThemeColors.HOVER_BG};
+            }}
+
+            QGroupBox {{
+                color: {ThemeColors.TEXT_PRIMARY};
                 border: 1px solid #555;
                 margin-top: 10px;
                 padding-top: 10px;
-            }
-            
-            QGroupBox::title {
-                color: #4a9eff;
+            }}
+
+            QGroupBox::title {{
+                color: {ThemeColors.ACCENT};
                 subcontrol-origin: margin;
                 left: 10px;
                 padding: 0 5px 0 5px;
-            }
+            }}
         """)
 
 class AdvancedSettingsDialog(ResponsiveDialog):
@@ -106,7 +107,7 @@ class AdvancedSettingsDialog(ResponsiveDialog):
         header = QLabel("⚙️ Advanced Settings")
         header.setFont(QFont("Arial", 14, QFont.Bold))
         header.setAlignment(Qt.AlignCenter)
-        header.setStyleSheet("color: #4a9eff; padding: 10px;")
+        header.setStyleSheet(f"color: {ThemeColors.ACCENT}; padding: 10px;")
         layout.addWidget(header)
         
         # Settings tabs
@@ -251,7 +252,7 @@ class HelpDialog(ResponsiveDialog):
         header = QLabel("📚 Help & Documentation")
         header.setFont(QFont("Arial", 14, QFont.Bold))
         header.setAlignment(Qt.AlignCenter)
-        header.setStyleSheet("color: #4a9eff; padding: 10px;")
+        header.setStyleSheet(f"color: {ThemeColors.ACCENT}; padding: 10px;")
         layout.addWidget(header)
         
         # Help content tabs
@@ -278,7 +279,7 @@ class HelpDialog(ResponsiveDialog):
         # Close button
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.accept)
-        close_btn.setStyleSheet("QPushButton { background-color: #51cf66; font-weight: bold; padding: 8px 16px; }")
+        close_btn.setStyleSheet(f"QPushButton {{ background-color: {ThemeColors.SUCCESS}; font-weight: bold; padding: 8px 16px; }}")
         
         button_layout = QHBoxLayout()
         button_layout.addStretch()

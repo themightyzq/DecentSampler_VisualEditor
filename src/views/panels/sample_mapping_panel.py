@@ -4,6 +4,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QMimeData, QSize
 from PyQt5.QtGui import QDragEnterEvent, QDropEvent, QPixmap, QPainter, QColor, QBrush, QPen, QIcon
 from utils.error_handling import ErrorHandler, with_error_handling
+from utils.theme_manager import ThemeColors
 from utils.accessibility import (
     AccessibilityIndicator, AccessibilitySymbol, accessibility_settings,
     get_status_symbol, get_accessible_color
@@ -73,7 +74,7 @@ class SmartFileDetector:
                 # Convert to MIDI note
                 try:
                     octave = int(octave)
-                    note_upper = note.upper()
+                    note_upper = note[0].upper() + note[1:]
                     if note_upper in SmartFileDetector.NOTE_TO_MIDI:
                         midi_note = SmartFileDetector.NOTE_TO_MIDI[note_upper] + (octave + 1) * 12
                         if 0 <= midi_note <= 127:
@@ -252,19 +253,19 @@ class SampleMappingPanel(QWidget):
         # Drag & drop zone (initially hidden)
         self.drop_zone = QFrame()
         self.drop_zone.setFrameShape(QFrame.StyledPanel)
-        self.drop_zone.setStyleSheet("""
-            QFrame {
-                background: #2a4d3a;
-                border: 2px dashed #4a7c59;
+        self.drop_zone.setStyleSheet(f"""
+            QFrame {{
+                background: {ThemeColors.SECONDARY_BG};
+                border: 2px dashed {ThemeColors.ACCENT};
                 border-radius: 8px;
                 margin: 4px;
                 min-height: 60px;
-            }
+            }}
         """)
         drop_layout = QVBoxLayout()
         drop_label = QLabel("Drop sample files or folders here")
         drop_label.setAlignment(Qt.AlignCenter)
-        drop_label.setStyleSheet("color: #7fa582; font-size: 14px; font-weight: bold;")
+        drop_label.setStyleSheet(f"color: {ThemeColors.ACCENT_HOVER}; font-size: 14px; font-weight: bold;")
         drop_layout.addWidget(drop_label)
         self.drop_zone.setLayout(drop_layout)
         self.drop_zone.setVisible(False)
@@ -282,7 +283,7 @@ class SampleMappingPanel(QWidget):
                 color: #f0f0f0;
             }
             QProgressBar::chunk {
-                background: #4a7c59;
+                background: #4a9eff;
                 border-radius: 3px;
             }
         """)
@@ -392,7 +393,7 @@ class SampleMappingPanel(QWidget):
         actions_group = VisualGroup("Actions", "subsection")
         
         # Create smart button group for main actions
-        main_buttons = SmartButtonGroup(orientation=Qt.Horizontal)
+        main_buttons = SmartButtonGroup(orientation=Qt.Vertical)
         
         # Import buttons with enhanced tooltips
         import_buttons = [
@@ -452,20 +453,20 @@ class SampleMappingPanel(QWidget):
             
             if checked:
                 self.visual_map_btn.setText("Exit Visual Map")
-                self.visual_map_btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #4a7c59;
-                        color: white;
+                self.visual_map_btn.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {ThemeColors.ACCENT};
+                        color: {ThemeColors.TEXT_PRIMARY};
                         min-height: 38px;
                         min-width: 140px;
                         padding: 8px 18px;
                         font-size: 14px;
                         font-weight: 500;
                         text-align: center;
-                    }
-                    QPushButton:hover {
-                        background-color: #5a8c69;
-                    }
+                    }}
+                    QPushButton:hover {{
+                        background-color: {ThemeColors.ACCENT_HOVER};
+                    }}
                 """)
                 
                 # Show helpful status message
@@ -603,14 +604,14 @@ class SampleMappingPanel(QWidget):
             if valid_files:
                 event.acceptProposedAction()
                 self.drop_zone.setVisible(True)
-                self.drop_zone.setStyleSheet("""
-                    QFrame {
-                        background: #3a5d4a;
-                        border: 2px dashed #6a9c79;
+                self.drop_zone.setStyleSheet(f"""
+                    QFrame {{
+                        background: {ThemeColors.HOVER_BG};
+                        border: 2px dashed {ThemeColors.ACCENT};
                         border-radius: 8px;
                         margin: 4px;
                         min-height: 60px;
-                    }
+                    }}
                 """)
         else:
             event.ignore()
@@ -744,7 +745,11 @@ class SampleMappingPanel(QWidget):
         
         # Refresh the table
         self.set_samples(self.samples)
-        
+
+        # Switch to editor view if welcome overlay is showing
+        if hasattr(self.main_window, '_switch_to_editor'):
+            self.main_window._switch_to_editor()
+
         # Show results
         auto_detected = sum(1 for m in mappings if m.get('auto_detected', False))
         total = len(mappings)
@@ -903,11 +908,6 @@ class SampleMappingPanel(QWidget):
                 file_path = mapping.get("path", "")
             else:
                 file_path = getattr(mapping, "path", "")
-            
-            print(f"DEBUG: Selected sample: {os.path.basename(file_path) if file_path else 'None'}")
-            print(f"DEBUG: File exists: {os.path.exists(file_path) if file_path else False}")
-            print(f"DEBUG: Audio preview widget: {self.audio_preview}")
-            print(f"DEBUG: Waveform widget: {getattr(self.audio_preview, 'waveform', None)}")
             
             if file_path and os.path.exists(file_path):
                 self.audio_preview.load_file(file_path)

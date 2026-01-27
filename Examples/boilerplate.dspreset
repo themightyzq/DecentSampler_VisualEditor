@@ -25,10 +25,10 @@
                  translation="table" 
                  translationTable="0,33;0.3,150;0.4,450;0.5,1100;0.7,4100;0.9,11000;1.0001,22000"/>
       </labeled-knob>
-      <labeled-knob x="725" y="75" width="90" textSize="16" textColor="AA000000" 
-                    trackForegroundColor="CC000000" trackBackgroundColor="66999999" 
-                    label="Reverb" type="percent" minValue="0" maxValue="100" 
-                    textColor="FF000000" value="50">
+      <labeled-knob x="725" y="75" width="90" textSize="16" textColor="FF000000"
+                    trackForegroundColor="CC000000" trackBackgroundColor="66999999"
+                    label="Reverb" type="percent" minValue="0" maxValue="100"
+                    value="50">
         <binding type="effect" level="instrument" position="2" 
                  parameter="FX_REVERB_WET_LEVEL" translation="linear" 
                  translationOutputMin="0" translationOutputMax="1" />

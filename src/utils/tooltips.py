@@ -243,15 +243,16 @@ def create_tooltip_widget(tooltip_text, parent=None):
     label = QLabel(tooltip_text, parent)
     label.setWordWrap(True)
     label.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-    label.setStyleSheet("""
-        QLabel {
+    from utils.theme_manager import ThemeColors
+    label.setStyleSheet(f"""
+        QLabel {{
             background-color: rgba(50, 50, 50, 240);
             color: white;
-            border: 1px solid #666;
+            border: 1px solid {ThemeColors.TEXT_DISABLED};
             border-radius: 6px;
             padding: 8px;
             font-size: 11px;
             max-width: 300px;
-        }
+        }}
     """)
     return label

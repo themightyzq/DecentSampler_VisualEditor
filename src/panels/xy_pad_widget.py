@@ -1,6 +1,7 @@
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QHBoxLayout, QLabel, QDoubleSpinBox, QFormLayout, QGroupBox, QColorDialog, QPushButton
 from PyQt5.QtCore import Qt, pyqtSignal, QRect, QPointF
 from PyQt5.QtGui import QPainter, QBrush, QPen, QColor, QFont, QLinearGradient
+from utils.theme_manager import ThemeColors
 import math
 
 class XYPad(QWidget):
@@ -21,11 +22,11 @@ class XYPad(QWidget):
         self.y_value = 0.5
         
         # Visual properties
-        self.pad_color = QColor("#333333")
-        self.border_color = QColor("#666666")
-        self.handle_color = QColor("#FFFFFF")
-        self.handle_pressed_color = QColor("#00AAFF")
-        self.grid_color = QColor("#555555")
+        self.pad_color = QColor(ThemeColors.PANEL_BG)
+        self.border_color = QColor(ThemeColors.TEXT_DISABLED)
+        self.handle_color = QColor(ThemeColors.TEXT_PRIMARY)
+        self.handle_pressed_color = QColor(ThemeColors.ACCENT)
+        self.grid_color = QColor(ThemeColors.BORDER)
         
         # Interaction state
         self.dragging = False
@@ -133,7 +134,7 @@ class XYPad(QWidget):
             painter.drawLine(pad_rect.left(), y, pad_rect.right(), y)
             
         # Draw axis labels
-        painter.setPen(QPen(QColor("#CCCCCC")))
+        painter.setPen(QPen(QColor(ThemeColors.TEXT_SECONDARY)))
         painter.setFont(QFont("Arial", 10))
         
         # X label (bottom center)
@@ -148,9 +149,9 @@ class XYPad(QWidget):
         painter.restore()
         
         # Draw value indicators
-        painter.setPen(QPen(QColor("#AAAAAA")))
-        painter.setFont(QFont("Arial", 8))
-        
+        painter.setPen(QPen(QColor(ThemeColors.TEXT_HINT)))
+        painter.setFont(QFont("Arial", 10))
+
         # X value range
         x_min_text = f"{self.x_min:.2f}"
         x_max_text = f"{self.x_max:.2f}"
@@ -187,7 +188,7 @@ class XYPad(QWidget):
         painter.drawLine(handle_pos.x(), handle_pos.y() - 4, handle_pos.x(), handle_pos.y() + 4)
         
         # Draw current values
-        painter.setPen(QPen(QColor("#FFFFFF")))
+        painter.setPen(QPen(QColor(ThemeColors.TEXT_PRIMARY)))
         painter.setFont(QFont("Arial", 9, QFont.Bold))
         value_text = f"({self.x_value:.3f}, {self.y_value:.3f})"
         value_rect = QRect(pad_rect.left(), pad_rect.top() - 15, pad_rect.width(), 15)
@@ -283,12 +284,12 @@ class XYPadEditor(QGroupBox):
         
         self.pad_color_btn = QPushButton("Pad Color")
         self.pad_color_btn.clicked.connect(self.choose_pad_color)
-        self.pad_color_btn.setStyleSheet("QPushButton { background-color: #333333; }")
+        self.pad_color_btn.setStyleSheet(f"QPushButton {{ background-color: {ThemeColors.PANEL_BG}; }}")
         color_layout.addWidget(self.pad_color_btn)
         
         self.handle_color_btn = QPushButton("Handle Color")
         self.handle_color_btn.clicked.connect(self.choose_handle_color)
-        self.handle_color_btn.setStyleSheet("QPushButton { background-color: #FFFFFF; color: #000000; }")
+        self.handle_color_btn.setStyleSheet(f"QPushButton {{ background-color: {ThemeColors.TEXT_PRIMARY}; color: {ThemeColors.PRIMARY_BG}; }}")
         color_layout.addWidget(self.handle_color_btn)
         
         color_widget = QWidget()

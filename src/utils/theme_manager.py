@@ -29,10 +29,10 @@ class ThemeColors:
     ACCENT_HOVER = "#6bb3ff"
     ACCENT_PRESSED = "#3a8eee"
     
-    # Status colors
-    SUCCESS = "#4caf50"
+    # Status colors (WCAG AA compliant against #1a1a1a)
+    SUCCESS = "#66bb6a"
     WARNING = "#ff9800"
-    ERROR = "#f44336"
+    ERROR = "#ff6659"
     INFO = "#2196f3"
     
     # Accessibility colors (colorblind-safe)
@@ -50,7 +50,7 @@ class ThemeColors:
     # Text colors
     TEXT_PRIMARY = "#ffffff"
     TEXT_SECONDARY = "#b0b0b0"
-    TEXT_DISABLED = "#666666"
+    TEXT_DISABLED = "#8a8a8a"
     TEXT_HINT = "#888888"
     
     # Special colors
@@ -71,6 +71,8 @@ class ThemeFonts:
     SIZE_BODY = 12
     SIZE_SMALL = 11
     SIZE_TINY = 10
+    SIZE_MIN = 10
+    SIZE_CAPTION = 10
     
     # Font weights
     WEIGHT_BOLD = 700
