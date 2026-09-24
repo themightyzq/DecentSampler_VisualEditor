@@ -31,7 +31,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-xinerama0 libegl1 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0
+          sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-xinerama0 libegl1 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libpulse0 libpulse-mainloop-glib0
 
       - name: Install core dependencies
         run: |
@@ -75,7 +75,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-xinerama0 libegl1 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0
+          sudo apt-get install -y xvfb libxkbcommon-x11-0 libxcb-xinerama0 libegl1 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 libpulse0 libpulse-mainloop-glib0
 
       - name: Install dependencies
         run: |
@@ -88,7 +88,9 @@ jobs:
         continue-on-error: true
 
       - name: Build with PyInstaller
-        run: pyinstaller DecentSamplerEditor.spec
+        # No committed .spec: the bundle is described on the command line so the build
+        # cannot drift from a file nobody regenerates. --windowed gives the macOS .app.
+        run: pyinstaller --noconfirm --windowed --name DecentSamplerEditor --paths src src/main.py
 
       - name: Archive build (Linux)
         if: runner.os == 'Linux'

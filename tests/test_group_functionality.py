@@ -6,7 +6,7 @@ Verifies that all the implemented functionality works correctly
 
 import sys
 import os
-sys.path.append('/Users/user/Desktop/DecentSampler_FrontEnd/src')
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
 
 # Initialize QApplication for PyQt widgets
 from PyQt5.QtWidgets import QApplication

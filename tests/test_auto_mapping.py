@@ -6,7 +6,7 @@ This simulates the user's reported issue with C0_Close.wav, C1_Distant.wav etc.
 
 import sys
 import os
-sys.path.append('/Users/user/Desktop/DecentSampler_FrontEnd/src')
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'src'))
 
 from utils.intelligent_mapping import SampleAnalyzer, SampleGrouper, IntelligentMappingDialog
 
