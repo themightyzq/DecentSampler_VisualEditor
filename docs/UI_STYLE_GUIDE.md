@@ -1,7 +1,7 @@
 # DecentSampler Frontend UI Style Guide
 
 ## Overview
-This document outlines the design system and UI/UX guidelines for the DecentSampler Frontend application. Our design philosophy emphasizes clarity, consistency, and professional aesthetics with a modern dark theme.
+This document outlines the design system and UI/UX guidelines for the DecentSampler Frontend application. The design emphasizes clarity, consistency, and a dark theme.
 
 ## Design Principles
 
@@ -15,8 +15,8 @@ This document outlines the design system and UI/UX guidelines for the DecentSamp
 - Predictable interactions and behaviors
 - Standardized spacing and sizing
 
-### 3. **Professional Aesthetics**
-- Modern dark theme optimized for extended use
+### 3. **Dark Theme**
+- Dark theme intended for extended use
 - Subtle animations and transitions
 - Clean, uncluttered layouts
 
@@ -238,4 +238,4 @@ Based on an 8px grid system:
 
 ## Conclusion
 
-This style guide ensures a cohesive, professional user experience across the DecentSampler Frontend. By following these guidelines, we maintain consistency while allowing for future growth and enhancement of the interface.
+This style guide keeps the DecentSampler Frontend consistent. Following these guidelines maintains consistency while allowing for future growth and enhancement of the interface.

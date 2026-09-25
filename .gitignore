@@ -111,3 +111,6 @@ scripts/debug/
 # Internal docs (not user-facing)
 docs/archive/
 docs/ui_legibility_interactability_audit.md
+
+# Diversion workspace state (Diversion does not track its own .diversion folder)
+.diversion/

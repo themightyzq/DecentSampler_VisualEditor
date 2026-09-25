@@ -1,95 +1,66 @@
 # DecentSampler Visual Editor
 
-A cross-platform desktop application for visually editing DecentSampler `.dspreset` files. Built with Python and PyQt5.
+A desktop application for visually editing DecentSampler .dspreset preset files. It is for sound designers and sample library builders who use Decent Sampler, a free third-party sampler plugin, and it covers sample-to-key and velocity mapping, groups, effects, and modulation routing. Built with Python and PyQt5, and packaged as standalone apps for Windows, macOS, and Linux.
 
-## Features
+## Install
 
-- Visual editor for DecentSampler XML features (samples, groups, effects, modulation)
-- Piano keyboard widget with note-range visualization
-- Dark theme with accessibility support
-- Background-threaded file I/O
-- Graceful degradation when optional audio packages are missing
+Pre-built standalone apps for Windows, macOS, and Linux are attached to the
+[v0.1.0 release](https://github.com/themightyzq/DecentSampler_VisualEditor/releases/tag/v0.1.0)
+on GitHub. These builds are unsigned, so you may need to bypass OS gatekeeper
+warnings on first launch.
 
-## Getting Started
+To run from source instead, see Build below.
 
-### Prerequisites
+## Use
 
-- Python 3.7+
+- File > New starts a blank preset; File > Open... loads an existing .dspreset file.
+- The sample mapping panel maps samples to key and velocity ranges on the keyboard.
+- The group manager organizes samples into groups, including velocity layers,
+  round robin, and blend groups.
+- The effects panel adds and configures effects such as reverb, delay, and
+  chorus from the built-in effects catalog.
+- The modulation panel routes LFOs to parameters.
+- File > Save writes the result back to a .dspreset file for use in Decent Sampler.
 
-### Installation
+See the [official Decent Sampler developer guide](https://decentsampler-developers-guide.readthedocs.io/)
+for the .dspreset file format itself.
+
+## Build
+
+### Run from source
+
+Requires Python 3.7 or newer.
 
 ```bash
 pip install -r requirements.txt
-pip install -r requirements-optional.txt  # Optional: pygame, numpy, librosa, pydub, soundfile
-```
-
-### Running
-
-```bash
+pip install -r requirements-optional.txt  # optional: pygame, numpy, librosa, pydub, soundfile
 cd src && python main.py
 ```
 
-### Testing
+### Build a standalone executable
 
-```bash
-pip install pytest
-cd src && python -m pytest ../tests/ -v
-```
-
-### Downloads
-
-Pre-built standalone apps for Windows, macOS, and Linux are available on the [Releases](../../releases) page. No Python installation required.
-
-### Building from Source (Standalone Executable)
+Standalone executables are built with PyInstaller, using the same command CI runs:
 
 ```bash
 pip install pyinstaller
-pyinstaller DecentSamplerEditor.spec
+pyinstaller --noconfirm --windowed --name DecentSamplerEditor --paths src src/main.py
 ```
 
 Output lands in `dist/DecentSamplerEditor/` (or `dist/DecentSamplerEditor.app` on macOS).
 
-### CI / Releases
-
-CI runs automatically on push to `main` and on pull requests:
-
-1. **Test**: runs `pytest` across Windows, macOS, Linux with Python 3.9/3.11/3.12
-2. **Build**: if tests pass, produces standalone apps via PyInstaller (Python 3.11)
-3. **Release**: when a version tag (`v*`) is pushed, build artifacts are automatically attached to the corresponding GitHub release
-
-To cut a new release:
+### Tests
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+pip install pytest
+python -m pytest tests/ -v
 ```
 
-Then create a release on GitHub for that tag (or use `gh release create v0.2.0`). CI will attach the platform builds automatically.
-
-## Architecture
-
-```
-src/
-|-- main.py                      # Entry point
-|-- model.py                     # Backward-compat shim (re-exports from models/)
-|-- models/                      # Data model classes
-|   |-- data_classes.py          # SampleZone, SampleMapping, LFO, UIElement, etc.
-|   `-- instrument_preset.py     # InstrumentPreset (core preset object)
-|-- serialization/               # XML I/O
-|   |-- dspreset_reader.py       # .dspreset XML -> InstrumentPreset
-|   `-- dspreset_writer.py       # InstrumentPreset -> .dspreset XML
-|-- views/
-|   |-- windows/main_window.py   # Main UI coordinator
-|   `-- panels/                  # View-layer panels (sample mapping, preview, etc.)
-|-- panels/                      # Core panels (piano keyboard, groups, modulation, etc.)
-|-- widgets/                     # Custom widgets (knobs, sliders, audio preview)
-|-- utils/                       # Utilities (theme, errors, accessibility, layout)
-|-- styles/main_theme.qss        # QSS stylesheet
-`-- commands/commands.py         # Undo/redo (stub)
-```
-
-See [docs/UI_STYLE_GUIDE.md](docs/UI_STYLE_GUIDE.md) for the design system reference.
+CI runs this across Windows, macOS, and Linux on Python 3.9, 3.11, and 3.12,
+then builds standalone apps with PyInstaller on push to main and on pull requests.
 
 ## License
 
-MIT License
+GNU General Public License v3.0 or later (GPL-3.0-or-later). See [LICENSE](LICENSE)
+for the full text.
+
+Copyright ZQ SFX. https://www.zq-sfx.com  connect@zq-sfx.com
