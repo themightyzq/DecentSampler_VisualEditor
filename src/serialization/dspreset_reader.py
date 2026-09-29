@@ -1,4 +1,5 @@
 """Read .dspreset XML files into InstrumentPreset objects."""
+import os
 import xml.etree.ElementTree as ET
 from models.data_classes import (
     SampleZone, SampleMapping, GroupEnvelope, LFO,
@@ -13,6 +14,8 @@ def read_dspreset(path: str):
 
     tree = ET.parse(path)
     root = tree.getroot()
+    # Sample paths in a .dspreset are relative to the preset file's folder.
+    preset_dir = os.path.dirname(os.path.abspath(path))
     name = root.attrib.get("presetName", "Untitled")
 
     ui_elem = root.find(".//ui")
@@ -46,7 +49,7 @@ def read_dspreset(path: str):
                 envelope.sustain = float(env_elem.attrib.get("sustain", 1.0))
                 envelope.release = float(env_elem.attrib.get("release", 0.43))
             for sample in group.findall("sample"):
-                _parse_sample(sample, mappings, zones)
+                _parse_sample(sample, mappings, zones, preset_dir)
 
     lfos, modulation_routes = _parse_modulators(root)
 
@@ -115,9 +118,16 @@ def _parse_ui_elements(ui_elem):
     return ui_elements
 
 
-def _parse_sample(sample_elem, mappings, zones):
-    """Parse a <sample> element and append to mappings and zones."""
+def _parse_sample(sample_elem, mappings, zones, preset_dir=None):
+    """Parse a <sample> element and append to mappings and zones.
+
+    Relative sample paths are resolved against preset_dir (the directory of the
+    .dspreset being read) so they stay valid regardless of the working directory.
+    Absolute paths are left unchanged.
+    """
     sample_path = sample_elem.attrib.get("path", "")
+    if sample_path and preset_dir and not os.path.isabs(sample_path):
+        sample_path = os.path.normpath(os.path.join(preset_dir, sample_path))
     lo = int(sample_elem.attrib.get("loNote", 0))
     hi = int(sample_elem.attrib.get("hiNote", 127))
     root_note = int(sample_elem.attrib.get("rootNote", 60))
