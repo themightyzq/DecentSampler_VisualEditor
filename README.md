@@ -21,6 +21,13 @@ To run from source instead, see Build below.
   chorus from the built-in effects catalog.
 - The modulation panel routes LFOs to parameters.
 - File > Save writes the result back to a .dspreset file for use in Decent Sampler.
+  Saving writes a temporary file next to the target and then replaces the target, so a
+  failed save leaves the existing file as it was.
+- A preset you open and save again keeps what the editor does not edit: UI controls and
+  their bindings, group settings, MIDI mappings, effect and modulator details, tags,
+  notes, and comments inside the root element. Comments before the root element are not kept.
+- The editor asks whether to save when you close it, open another preset, or start a new
+  one while there are unsaved changes.
 
 See the [official Decent Sampler developer guide](https://decentsampler-developers-guide.readthedocs.io/)
 for the .dspreset file format itself.

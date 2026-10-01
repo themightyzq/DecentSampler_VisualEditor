@@ -67,6 +67,16 @@ class InstrumentPreset:
         self.lfos = lfos if lfos is not None else []
         self.modulation_routes = modulation_routes if modulation_routes is not None else []
         self.sample_groups = sample_groups if sample_groups is not None else []
+        self.bg_color = None
+
+        # Set by the reader when the preset came from a file. source_root is the
+        # parsed XML (never modified); as_read holds what the editor modelled at
+        # read time; source_bound lists (element, model object) pairs. The writer
+        # patches a copy of source_root so XML the editor does not model survives.
+        self.source_root = None
+        self.source_path = None
+        self.as_read = None
+        self.source_bound = []
 
     @staticmethod
     def from_dspreset(path: str) -> "InstrumentPreset":
@@ -76,6 +86,47 @@ class InstrumentPreset:
     def to_dspreset(self, path: str):
         from serialization.dspreset_writer import write_dspreset
         write_dspreset(self, path)
+
+    def sync_zones_from_mappings(self, mappings):
+        """Make sample_manager's zones follow the mapping list the editor shows.
+
+        The sample mapping panel edits SampleMapping objects (path, key range, root);
+        the writer saves SampleZone objects, which also hold velocity, loop, tune and
+        the link to the XML element the zone was read from. This pairs each mapping
+        with a zone, copies the key range and root across, creates zones for new
+        mappings and drops zones whose mapping is gone. A zone keeps its identity, so
+        everything else about it survives.
+
+        Pairing: the same path and key range first, then the same path in order.
+        """
+        old_zones = list(self.sample_manager.get_zones())
+        used = set()
+
+        def take(match):
+            for index, zone in enumerate(old_zones):
+                if index not in used and match(zone):
+                    used.add(index)
+                    return zone
+            return None
+
+        new_zones = []
+        pairs = []
+        for mapping in mappings:
+            zone = take(lambda z, m=mapping: z.path == m.path and z.loNote == m.lo
+                        and z.hiNote == m.hi and z.rootNote == m.root)
+            pairs.append(zone)
+        for index, mapping in enumerate(mappings):
+            zone = pairs[index]
+            if zone is None:
+                zone = take(lambda z, m=mapping: z.path == m.path)
+            if zone is None:
+                zone = SampleZone(
+                    mapping.path, mapping.root, mapping.lo, mapping.hi,
+                    velocityRange=tuple(getattr(mapping, "velocity_range", None) or (0, 127)))
+            else:
+                zone.loNote, zone.hiNote, zone.rootNote = mapping.lo, mapping.hi, mapping.root
+            new_zones.append(zone)
+        self.sample_manager.zones = new_zones
 
     def auto_map(self, folder_path: str):
         wavs = sorted(

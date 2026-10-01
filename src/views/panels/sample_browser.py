@@ -116,7 +116,11 @@ class SamplePanel(QWidget):
                     lo = getattr(m, "lo", 0)
                     hi = getattr(m, "hi", 127)
                     root = getattr(m, "root", 60)
-                mappings.append({"path": path, "lo": lo, "hi": hi, "root": root})
+                entry = {"path": path, "lo": lo, "hi": hi, "root": root}
+                velocity_range = m.get("velocity_range") if isinstance(m, dict) else getattr(m, "velocity_range", None)
+                if velocity_range:
+                    entry["velocity_range"] = velocity_range
+                mappings.append(entry)
             self.set_samples(mappings)
 
     def on_sample_selected(self, curr, prev):

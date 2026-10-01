@@ -24,6 +24,7 @@ from widgets.smart_components import SmartTabWidget, WorkflowPanel, SmartButton,
 from widgets.welcome_overlay import WelcomeOverlay
 from utils.enhanced_typography import create_h2_label, create_body_label
 from model import InstrumentPreset, SampleMapping, SampleZone
+from serialization.dspreset_writer import preset_fingerprint
 import os
 
 # Import UI helpers for consistency
@@ -104,10 +105,18 @@ class PresetSaveWorker(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("DecentSampler Preset Editor")
+        self.setWindowTitle("DecentSampler Preset Editor [*]")
         self.setGeometry(100, 100, 1200, 800)
         self.undo_stack = QUndoStack(self)
         self.preset = None
+        # Unsaved-changes tracking: the file the preset came from or was saved to, and a
+        # fingerprint of what the editor would write at the last open/save/new.
+        self.current_path = None
+        self._clean_fingerprint = None
+        self._pending_clean_fingerprint = None
+        self._title_timer = QTimer(self)
+        self._title_timer.setSingleShot(True)
+        self._title_timer.timeout.connect(self._refresh_title)
         
         # Set up error handling
         self.error_handler = get_global_error_handler(self)
@@ -454,10 +463,14 @@ class MainWindow(QMainWindow):
             # Connect modulation changes (now in Modulation tab)
             if hasattr(self, 'modulation_panel'):
                 self.modulation_panel.modulationChanged.connect(self._safe_modulation_update)
+                self.modulation_panel.modulationChanged.connect(self._schedule_title_refresh)
                 
             # Connect group manager changes (now in Groups tab)
             if hasattr(self, 'group_manager'):
                 self.group_manager.groupsChanged.connect(self._groups_update)
+                self.group_manager.groupsChanged.connect(self._schedule_title_refresh)
+
+            self.undo_stack.indexChanged.connect(self._schedule_title_refresh)
                 
             # Connect keyboard interaction signals
             if hasattr(self, 'piano_keyboard'):
@@ -556,6 +569,9 @@ class MainWindow(QMainWindow):
                 self.error_handler.handle_error(e, "updating group display", show_dialog=False)
 
     def new_preset(self):
+        if self.preset is not None and not self._confirm_discard("start a new preset"):
+            return
+        self.current_path = None
         self.preset = InstrumentPreset("Untitled")
         self.preset.ui_width = 812
         self.preset.ui_height = 375
@@ -573,6 +589,7 @@ class MainWindow(QMainWindow):
         
         # Show welcome overlay for fresh preset
         self._switch_to_welcome()
+        self.mark_clean()
 
     def open_preset(self):
         """Open a preset file with comprehensive error handling"""
@@ -583,6 +600,8 @@ class MainWindow(QMainWindow):
             "DecentSampler Preset (*.dspreset);;All Files (*)"
         )
         if not path:
+            return
+        if not self._confirm_discard("open another preset"):
             return
         
         # Stop any existing load worker
@@ -639,6 +658,9 @@ class MainWindow(QMainWindow):
             # Switch to editor view
             self._switch_to_editor()
 
+            self.current_path = self.load_worker.file_path
+            self.mark_clean()
+
             # Hide loading overlay and re-enable UI
             self.loading_overlay.hide()
             self.menuBar().setEnabled(True)
@@ -678,6 +700,8 @@ class MainWindow(QMainWindow):
             return
             
         try:
+            # Pull the panels' state into the preset first: validation reads the mappings
+            self._update_preset_from_ui()
             # Pre-save validation
             validation_errors = self._validate_preset_for_save()
             if validation_errors:
@@ -688,23 +712,12 @@ class MainWindow(QMainWindow):
             # Update preset from UI panels
             self._update_preset_from_ui()
             
-            # Get save path with better default naming
-            default_name = getattr(self.preset, 'name', 'Untitled').replace(' ', '_')
-            if not default_name.endswith('.dspreset'):
-                default_name += '.dspreset'
-                
-            path, _ = QFileDialog.getSaveFileName(
-                self, 
-                "Save DecentSampler Preset", 
-                default_name,
-                "DecentSampler Preset (*.dspreset);;All Files (*)"
-            )
+            path = self._ask_save_path()
             if not path:
                 return
-                
-            # Ensure .dspreset extension
-            if not path.lower().endswith('.dspreset'):
-                path += '.dspreset'
+
+            # What this save will contain; becomes the clean state if it succeeds.
+            self._pending_clean_fingerprint = self._fingerprint()
             
             # Stop any existing save worker
             if self.save_worker and self.save_worker.isRunning():
@@ -734,11 +747,130 @@ class MainWindow(QMainWindow):
             else:
                 QMessageBox.critical(self, "Error Saving Preset", f"Failed to save preset:\n{str(e)}")
     
+    def _ask_save_path(self):
+        """Ask where to save; defaults to the file the preset came from."""
+        default_name = self.current_path
+        if not default_name:
+            default_name = getattr(self.preset, 'name', 'Untitled').replace(' ', '_')
+            if not default_name.endswith('.dspreset'):
+                default_name += '.dspreset'
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save DecentSampler Preset",
+            default_name,
+            "DecentSampler Preset (*.dspreset);;All Files (*)"
+        )
+        if not path:
+            return None
+        if not path.lower().endswith('.dspreset'):
+            path += '.dspreset'
+        return path
+
+    # ----- Unsaved-changes tracking -----
+
+    def _fingerprint(self):
+        """Fingerprint of what the editor would save now, or None if it cannot be computed."""
+        if self.preset is None:
+            return None
+        try:
+            self._update_preset_from_ui()
+            return preset_fingerprint(self.preset)
+        except Exception:
+            return None
+
+    def mark_clean(self):
+        """Record the current state as saved."""
+        self._clean_fingerprint = self._fingerprint()
+        self._refresh_title()
+
+    def is_dirty(self):
+        """True if the preset differs from what was last opened, saved or created."""
+        if self.preset is None:
+            return False
+        fingerprint = self._fingerprint()
+        return fingerprint is None or fingerprint != self._clean_fingerprint
+
+    def _schedule_title_refresh(self, *args):
+        self._title_timer.start(250)
+
+    def _refresh_title(self):
+        if self.preset is None:
+            return
+        name = os.path.basename(self.current_path) if self.current_path else "Untitled"
+        self.setWindowTitle(f"{name}[*] - DecentSampler Preset Editor")
+        self.setWindowModified(self.is_dirty())
+
+    def _ask_unsaved(self, action):
+        """Ask Save / Don't Save / Cancel. Returns 'save', 'discard' or 'cancel'."""
+        name = os.path.basename(self.current_path) if self.current_path else getattr(self.preset, "name", "Untitled")
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Warning)
+        box.setWindowTitle("Unsaved Changes")
+        box.setText(f'Save changes to "{name}" before you {action}?')
+        box.setInformativeText("Your changes will be lost if you do not save them.")
+        save_btn = box.addButton("Save", QMessageBox.AcceptRole)
+        discard_btn = box.addButton("Don't Save", QMessageBox.DestructiveRole)
+        cancel_btn = box.addButton("Cancel", QMessageBox.RejectRole)
+        box.setDefaultButton(save_btn)
+        box.setEscapeButton(cancel_btn)
+        box.exec_()
+        clicked = box.clickedButton()
+        if clicked is save_btn:
+            return "save"
+        if clicked is discard_btn:
+            return "discard"
+        return "cancel"
+
+    def _confirm_discard(self, action):
+        """Return True if it is safe to replace or close the current preset."""
+        if self.preset is None or not self.is_dirty():
+            return True
+        choice = self._ask_unsaved(action)
+        if choice == "save":
+            return self._save_current_sync()
+        return choice == "discard"
+
+    def _save_current_sync(self):
+        """Save and wait for the result. Returns True only if the file was written."""
+        self._update_preset_from_ui()
+        errors = self._validate_preset_for_save()
+        if errors:
+            QMessageBox.warning(
+                self, "Validation Errors",
+                "Please fix the following issues before saving:\n\n" + "\n".join(errors))
+            return False
+        path = self.current_path or self._ask_save_path()
+        if not path:
+            return False
+        fingerprint = self._fingerprint()
+        try:
+            self.preset.to_dspreset(path)
+        except Exception as e:
+            QMessageBox.critical(self, "Error Saving Preset", f"Failed to save preset:\n{str(e)}")
+            return False
+        self.current_path = path
+        self._clean_fingerprint = fingerprint
+        self._refresh_title()
+        return True
+
+    def closeEvent(self, event):
+        """Ask before closing with unsaved changes; Cancel keeps the window open."""
+        if self.save_worker and self.save_worker.isRunning():
+            self.save_worker.wait(15000)
+        if self._confirm_discard("close the editor"):
+            event.accept()
+        else:
+            event.ignore()
+
     def _on_preset_saved(self, file_path):
         """Handle successful preset saving"""
         # Hide loading overlay and re-enable UI
         self.loading_overlay.hide()
         self.menuBar().setEnabled(True)
+
+        self.current_path = file_path
+        self._clean_fingerprint = self._pending_clean_fingerprint
+        self._refresh_title()
         
         # Update preview with new path
         self.preview_canvas.set_preset(self.preset, os.path.dirname(file_path))
@@ -807,13 +939,14 @@ class MainWindow(QMainWindow):
             # Update from options panel
             if hasattr(self, 'global_options_panel'):
                 opts = self.global_options_panel.get_options()
-                self.preset.bg_image = opts.get("bg_image", "")
-                self.preset.have_tone = opts.get("have_tone", False)
-                self.preset.have_chorus = opts.get("have_chorus", False)  
-                self.preset.have_reverb = opts.get("have_reverb", False)
-                self.preset.have_midicc1 = opts.get("have_midicc1", False)
-                self.preset.cut_all_by_all = opts.get("cut_all_by_all", False)
-                self.preset.silencing_mode = opts.get("silencing_mode", "normal")
+                # Apply only the options the panel actually shows. Writing defaults for
+                # the rest would overwrite values read from the opened file.
+                if "bg_image" in opts:
+                    self.preset.bg_image = opts["bg_image"]
+                for key in ("have_tone", "have_chorus", "have_reverb", "have_midicc1",
+                            "cut_all_by_all", "silencing_mode"):
+                    if key in opts:
+                        setattr(self.preset, key, opts[key])
                 
             # Update ADSR flags from group properties
             if hasattr(self, 'group_properties_panel_widget'):
@@ -828,13 +961,18 @@ class MainWindow(QMainWindow):
                 try:
                     if isinstance(m, dict):
                         if all(k in m for k in ("path", "lo", "hi", "root")):
-                            valid_mappings.append(SampleMapping(m["path"], m["lo"], m["hi"], m["root"]))
+                            converted = SampleMapping(m["path"], m["lo"], m["hi"], m["root"])
+                            if m.get("velocity_range"):
+                                converted.velocity_range = tuple(m["velocity_range"])
+                            valid_mappings.append(converted)
                     elif hasattr(m, "path") and hasattr(m, "lo") and hasattr(m, "hi") and hasattr(m, "root"):
                         valid_mappings.append(m)
                 except Exception as e:
                     self.error_handler.handle_error(e, "validating sample mapping", show_dialog=False)
                     
             self.preset.mappings = valid_mappings
+            # The mapping panel is what the user edits; the writer saves zones.
+            self.preset.sync_zones_from_mappings(valid_mappings)
             
             # Update modulation data
             if hasattr(self, 'modulation_panel'):
@@ -849,13 +987,33 @@ class MainWindow(QMainWindow):
         if not self.preset:
             return
         panel = self.global_options_panel
-        panel.preset_name_edit.setText(self.preset.name)
-        panel.ui_width_spin.setValue(self.preset.ui_width)
-        panel.ui_height_spin.setValue(self.preset.ui_height)
-        panel.bg_color_edit.setText(getattr(self.preset, "bg_color", "") or "")
+        # Read everything first and fill the widgets with their signals blocked: the
+        # panel's change handlers write widget values back into the preset, so filling
+        # one field at a time would overwrite the others (the colour, for example)
+        # with the widgets' previous contents.
+        name = self.preset.name
+        width = self.preset.ui_width
+        height = self.preset.ui_height
+        bg_color = getattr(self.preset, "bg_color", "") or ""
+        bg_image = self.preset.bg_image or ""
+        widgets = [panel.preset_name_edit, panel.ui_width_spin, panel.ui_height_spin,
+                   panel.bg_color_edit, panel.bg_image_edit]
         if hasattr(panel, "bg_color_btn"):
-            panel.bg_color_btn.setText(getattr(self.preset, "bg_color", "") or "")
-        panel.bg_image_edit.setText(self.preset.bg_image or "")
+            widgets.append(panel.bg_color_btn)
+        previously_blocked = [w.blockSignals(True) for w in widgets]
+        try:
+            panel.preset_name_edit.setText(name)
+            panel.ui_width_spin.setValue(width)
+            panel.ui_height_spin.setValue(height)
+            panel.bg_color_edit.setText(bg_color)
+            if hasattr(panel, "bg_color_btn"):
+                panel.bg_color_btn.setText(bg_color)
+            panel.bg_image_edit.setText(bg_image)
+        finally:
+            for widget, was_blocked in zip(widgets, previously_blocked):
+                widget.blockSignals(was_blocked)
+        if hasattr(panel, "_live_update"):
+            panel._live_update()  # sync the preview size; values now match the preset
         # Set ADSR controls from model envelope
         if hasattr(self, "group_properties_panel_widget") and hasattr(self.preset, "envelope"):
             env = self.preset.envelope

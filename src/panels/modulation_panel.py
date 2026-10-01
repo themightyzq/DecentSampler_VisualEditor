@@ -112,16 +112,32 @@ class LFOEditor(QGroupBox):
         
     def update_from_lfo(self):
         """Update UI from LFO data"""
-        self.name_edit.setCurrentText(self.lfo.name)
-        self.frequency_spin.setValue(self.lfo.frequency)
-        self.waveform_combo.setCurrentText(self.lfo.waveform)
-        self.amplitude_spin.setValue(self.lfo.amplitude)
-        self.offset_spin.setValue(self.lfo.offset)
-        self.phase_spin.setValue(self.lfo.phase)
-        self.sync_combo.setCurrentText(self.lfo.sync)
-        self.sync_length_combo.setCurrentText(self.lfo.sync_length)
-        self.retrigger_check.setChecked(self.lfo.retrigger)
-        self.on_sync_changed()  # Update enabled state
+        # Every widget's change handler copies all widget values back into the LFO, so
+        # filling them one at a time with signals live would overwrite the LFO with the
+        # widgets' previous contents. Fill with signals blocked instead.
+        lfo = self.lfo
+        widgets = [self.name_edit, self.frequency_spin, self.waveform_combo, self.amplitude_spin,
+                   self.offset_spin, self.phase_spin, self.sync_combo, self.sync_length_combo,
+                   self.retrigger_check]
+        was_blocked = [w.blockSignals(True) for w in widgets]
+        try:
+            self.name_edit.setCurrentText(lfo.name)
+            self.frequency_spin.setValue(lfo.frequency)
+            self.waveform_combo.setCurrentText(lfo.waveform)
+            self.amplitude_spin.setValue(lfo.amplitude)
+            self.offset_spin.setValue(lfo.offset)
+            self.phase_spin.setValue(lfo.phase)
+            self.sync_combo.setCurrentText(lfo.sync)
+            self.sync_length_combo.setCurrentText(lfo.sync_length)
+            self.retrigger_check.setChecked(lfo.retrigger)
+        finally:
+            for widget, blocked in zip(widgets, was_blocked):
+                widget.blockSignals(blocked)
+        # Update enabled state only; this must not write the LFO.
+        is_tempo = self.sync_combo.currentText() == "tempo"
+        self.sync_length_combo.setEnabled(is_tempo)
+        self.frequency_spin.setEnabled(not is_tempo)
+        self.frequency_spin.setSuffix(" (tempo sync)" if is_tempo else " Hz")
         
     def update_lfo_from_ui(self):
         """Update LFO data from UI"""

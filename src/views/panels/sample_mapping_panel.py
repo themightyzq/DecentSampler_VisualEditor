@@ -823,6 +823,8 @@ class SampleMappingPanel(QWidget):
                 mapping_obj = SampleMapping(path, lo, hi, root)
                 # Store detection status for display
                 setattr(mapping_obj, 'auto_detected', auto_detected)
+                if m.get("velocity_range"):
+                    mapping_obj.velocity_range = tuple(m["velocity_range"])
             else:
                 path = getattr(m, "path", str(m))
                 lo = getattr(m, "lo", 0)

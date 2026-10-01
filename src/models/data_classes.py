@@ -33,6 +33,15 @@ class SampleZone:
         # Sample tags for blending and organization
         self.tags = tags or []
 
+        # Set by the reader: the <sample> element this zone came from, the path
+        # attribute text as written in the file, the resolved path at read time and
+        # the modelled attributes at read time. The writer uses them to patch the
+        # original element instead of rebuilding it.
+        self.source_elem = None
+        self.source_path_attr = None
+        self.source_path = None
+        self.source_attrs = None
+
     def __repr__(self):
         return (
             f"SampleZone(path={self.path!r}, rootNote={self.rootNote}, "
@@ -99,6 +108,8 @@ class LFO:
         self.sync = sync
         self.sync_length = sync_length
         self.retrigger = retrigger
+        self.source_elem = None   # set by the reader (see SampleZone)
+        self.source_attrs = None
 
 
 class ModulatorTarget:
@@ -119,6 +130,8 @@ class ModulationRoute:
         self.target = target
         self.amount = amount
         self.invert = invert
+        self.source_elem = None   # set by the reader (see SampleZone)
+        self.source_attrs = None
 
 
 class UIElement:
@@ -141,3 +154,6 @@ class UIElement:
         self.midi_cc = midi_cc
         self.orientation = orientation
         self.color_ranges = color_ranges if color_ranges is not None else []
+        self.source_elem = None   # set by the reader (see SampleZone)
+        self.source_attrs = None
+        self.source_color_ranges = None

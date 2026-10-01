@@ -974,17 +974,17 @@ class ProjectPropertiesPanel(QDockWidget):
         """
         Returns a dictionary of all current preset options as shown in the panel.
         """
-        return {
+        options = {
             "preset_name": self.preset_name_edit.text(),
             "ui_width": self.ui_width_spin.value(),
             "ui_height": self.ui_height_spin.value(),
             "bg_color": self.bg_color_edit.text(),
             "bg_image": self.bg_image_edit.text(),
-            "have_reverb": self.enable_checkboxes["Reverb"].isChecked() if "Reverb" in self.enable_checkboxes else False,
-            "have_tone": self.enable_checkboxes["Tone"].isChecked() if "Tone" in self.enable_checkboxes else False,
-            "have_chorus": self.enable_checkboxes["Chorus"].isChecked() if "Chorus" in self.enable_checkboxes else False,
-            "have_midicc1": False,
-            "cut_all_by_all": False,
-            "silencing_mode": "normal",
             "widget_types": {effect: combo.currentText() for effect, combo in self.widget_type_combos.items()},
         }
+        # Only report flags this panel has a checkbox for. Reporting a constant for the
+        # others would make a save overwrite what the opened file said.
+        for effect, key in (("Reverb", "have_reverb"), ("Tone", "have_tone"), ("Chorus", "have_chorus")):
+            if effect in self.enable_checkboxes:
+                options[key] = self.enable_checkboxes[effect].isChecked()
+        return options
