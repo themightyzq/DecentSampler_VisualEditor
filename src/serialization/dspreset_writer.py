@@ -14,7 +14,6 @@ and fsynced, then moved over the target with ``os.replace``, so a failed write
 never damages an existing preset.
 """
 import copy
-import filecmp
 import os
 import shutil
 import tempfile
@@ -117,28 +116,46 @@ def _same_file(a, b):
         return False
 
 
+def _identical_bytes(a, b, chunk=1024 * 1024):
+    """True if the two files hold exactly the same bytes.
+
+    Size and modification time are not evidence of identity. Windows stamps files
+    from a clock that ticks about every 15 ms, so two different files made in the
+    same moment share a time, and so can files extracted from one archive. The size
+    check is only a quick way out; equal sizes are settled by reading the bytes.
+    """
+    try:
+        if os.path.getsize(a) != os.path.getsize(b):
+            return False
+        with open(a, "rb") as fa, open(b, "rb") as fb:
+            while True:
+                block_a = fa.read(chunk)
+                if block_a != fb.read(chunk):
+                    return False
+                if not block_a:
+                    return True
+    except OSError:
+        return False
+
+
 def _usable_destination(src, dest):
     """True if dest is free, is src itself, or already holds identical bytes."""
     if not os.path.exists(dest):
         return True
     if _same_file(src, dest):
         return True
-    try:
-        # Same size and modification time counts as identical (copy2 preserves the
-        # time), so a repeat save does not read every sample again; otherwise the
-        # bytes are compared.
-        return filecmp.cmp(src, dest, shallow=True)
-    except OSError:
-        return False
+    return _identical_bytes(src, dest)
 
 
-def _copy_atomic(src, dest):
+def _copy_atomic(src, dest, checked=False):
     """Copy src to dest through a temp file; never overwrites a different file.
 
     Does nothing if dest already holds the same file, so repeat saves do not copy
-    the whole library again.
+    the whole library again. checked=True means the caller has just run
+    _usable_destination, so an existing dest is known to be identical and is not
+    read a second time.
     """
-    if os.path.exists(dest) and _usable_destination(src, dest):
+    if os.path.exists(dest) and (checked or _usable_destination(src, dest)):
         return
     folder = os.path.dirname(dest)
     os.makedirs(folder, exist_ok=True)
@@ -183,7 +200,7 @@ class _SampleExporter:
                     if _same_file(orig, dest):
                         return attr
                     if os.path.isfile(orig) and _usable_destination(orig, dest):
-                        _copy_atomic(orig, dest)
+                        _copy_atomic(orig, dest, checked=True)
                         return attr
 
         if not os.path.isfile(orig):
@@ -198,7 +215,7 @@ class _SampleExporter:
             unique_filename = f"{name}_{i}{ext}"
             i += 1
         self.used.add(unique_filename)
-        _copy_atomic(orig, os.path.join(self.samples_dir, unique_filename))
+        _copy_atomic(orig, os.path.join(self.samples_dir, unique_filename), checked=True)
         return "samples/" + unique_filename
 
 

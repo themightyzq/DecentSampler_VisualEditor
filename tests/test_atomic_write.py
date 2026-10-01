@@ -176,6 +176,13 @@ def test_same_size_different_content_is_not_overwritten(tmp_path):
     (out / "samples").mkdir(parents=True)
     other = out / "samples" / "kick.wav"
     other.write_bytes(b"x" * wav.stat().st_size)  # same size, different bytes
+    # Same modification time too. Windows stamps files from a clock that ticks about
+    # every 15 ms, so two files written back to back get one time; set it outright so
+    # the test checks this on every platform and does not depend on timing.
+    stamp = wav.stat().st_mtime_ns
+    os.utime(other, ns=(stamp, stamp))
+    assert other.stat().st_size == wav.stat().st_size
+    assert other.stat().st_mtime_ns == wav.stat().st_mtime_ns
 
     preset = InstrumentPreset("P")
     preset.sample_manager.zones = [SampleZone(str(wav), 60, 60, 60)]

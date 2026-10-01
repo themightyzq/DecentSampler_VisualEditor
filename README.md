@@ -5,7 +5,7 @@ A desktop application for visually editing DecentSampler .dspreset preset files.
 ## Install
 
 Pre-built standalone apps for Windows, macOS, and Linux are attached to the
-[v0.2.0 release](https://github.com/themightyzq/DecentSampler_VisualEditor/releases/tag/v0.2.0)
+[v0.2.1 release](https://github.com/themightyzq/DecentSampler_VisualEditor/releases/tag/v0.2.1)
 on GitHub. These builds are unsigned, so you may need to bypass OS gatekeeper
 warnings on first launch.
 

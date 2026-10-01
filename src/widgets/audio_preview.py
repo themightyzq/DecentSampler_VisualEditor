@@ -44,9 +44,14 @@ class AudioPreviewEngine:
         self.position = 0
         self.error_handler = ErrorHandler()
         
+        # pygame being importable does not mean there is an audio device (CI runners,
+        # servers, a machine with no output). Without one the mixer stays uninitialised
+        # and every pygame.mixer call raises, so remember whether it really started.
+        self.mixer_ready = False
         if PYGAME_AVAILABLE:
             try:
                 pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=1024)
+                self.mixer_ready = True
             except Exception as e:
                 self.error_handler.handle_error(e, "initializing pygame mixer", show_dialog=False)
         
@@ -93,21 +98,24 @@ class AudioPreviewEngine:
     
     def stop(self):
         """Stop playback"""
-        if PYGAME_AVAILABLE:
+        if self.mixer_ready:
             pygame.mixer.music.stop()
         self.is_playing = False
         self.position = 0
     
     def pause(self):
         """Pause playback"""
-        if PYGAME_AVAILABLE:
+        if self.mixer_ready:
             pygame.mixer.music.pause()
         self.is_playing = False
     
     def get_is_playing(self):
-        """Check if currently playing"""
-        if PYGAME_AVAILABLE:
-            return pygame.mixer.music.get_busy()
+        """Check if currently playing (called by a timer every 100 ms: must never raise)"""
+        if self.mixer_ready:
+            try:
+                return bool(pygame.mixer.music.get_busy())
+            except pygame.error:
+                return False
         return False
 
 class WaveformWorker(QThread):
